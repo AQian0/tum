@@ -15,7 +15,7 @@
 //! ```
 //!
 //! The manager pushes events (output, exit, destroyed) to the frontend
-//! through the [`tum_events::EventBus`].
+//! through the [`tum_events::EventBus`] as [`tum_ipc::ServerEvent`] values.
 
 mod session;
 
@@ -64,12 +64,14 @@ impl SessionManager {
         {
             let sessions = Arc::clone(&sessions);
             let bus = event_bus.clone();
-            event_bus.subscribe("session:all_pty_exited", move |_event, payload| {
-                let session_id = payload.to_owned();
+            event_bus.subscribe("session:all_pty_exited", move |_event, session_id| {
+                let id = session_id.to_owned();
                 let mut guard = sessions.lock().unwrap();
-                if guard.remove(&session_id).is_some() {
-                    log::info!("Session auto-removed (all PTYs exited): {session_id}");
-                    if let Ok(json) = serde_json::to_string(&SessionDestroyedEvent { session_id }) {
+                if guard.remove(&id).is_some() {
+                    log::info!("Session auto-removed (all PTYs exited): {id}");
+                    if let Ok(json) =
+                        serde_json::to_string(&ServerEvent::SessionDestroyed { session_id: id })
+                    {
                         bus.emit("session:destroyed", &json);
                     }
                 }
@@ -82,80 +84,92 @@ impl SessionManager {
         }
     }
 
-    /// Create a new session with a single PTY.
-    pub fn create_session(&self, req: CreateSessionRequest) -> CreateSessionResponse {
-        let shell = req.command.unwrap_or_else(default_shell);
-        let cwd = req.cwd.clone();
+    // ── Message dispatch ────────────────────────────────────────────
 
-        let session = Session::new(self.event_bus.clone(), req.name.clone(), cwd, &shell);
+    /// Process an incoming [`ClientMessage`] and return the appropriate
+    /// [`ServerMessage`] response.
+    ///
+    /// This is the single entry point for all frontend requests.
+    pub fn handle_message(&self, msg: ClientMessage) -> Result<ServerMessage, String> {
+        match msg {
+            ClientMessage::CreateSession { name, cwd, command } => {
+                let shell = command.unwrap_or_else(default_shell);
+                let session = Session::new(self.event_bus.clone(), name.clone(), cwd.clone(), &shell);
 
-        let id = session.id().to_owned();
-        let pty_id = session.first_pty_id();
-        self.sessions.lock().unwrap().insert(id.clone(), session);
+                let session_id = session.id().to_owned();
+                let pty_id = session.first_pty_id();
+                self.sessions.lock().unwrap().insert(session_id.clone(), session);
 
-        log::info!("Session created: {id}");
-        CreateSessionResponse {
-            session_id: id,
-            pty_id,
+                log::info!("Session created: {session_id}");
+                Ok(ServerMessage::SessionCreated {
+                    session_id,
+                    pty_id,
+                })
+            }
+
+            ClientMessage::AttachPty { session_id, cwd } => {
+                let mut guard = self.sessions.lock().unwrap();
+                let session = guard
+                    .get_mut(&session_id)
+                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+
+                let shell = default_shell();
+                let pty_id = session.attach_pty(&shell, cwd.as_deref());
+
+                log::info!("PTY {pty_id} attached to session {session_id}");
+                Ok(ServerMessage::PtyAttached { pty_id })
+            }
+
+            ClientMessage::PtyInput {
+                session_id,
+                pty_id,
+                data,
+            } => {
+                let mut guard = self.sessions.lock().unwrap();
+                let session = guard
+                    .get_mut(&session_id)
+                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                session.write_pty(&pty_id, &data)?;
+                Ok(ServerMessage::Ack)
+            }
+
+            ClientMessage::PtyResize {
+                session_id,
+                pty_id,
+                rows,
+                cols,
+            } => {
+                let mut guard = self.sessions.lock().unwrap();
+                let session = guard
+                    .get_mut(&session_id)
+                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                session.resize_pty(&pty_id, rows, cols)?;
+                Ok(ServerMessage::Ack)
+            }
+
+            ClientMessage::DestroySession { session_id } => {
+                let mut guard = self.sessions.lock().unwrap();
+                guard
+                    .remove(&session_id)
+                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                log::info!("Session destroyed: {session_id}");
+                Ok(ServerMessage::Ack)
+            }
+
+            ClientMessage::ListSessions => {
+                let guard = self.sessions.lock().unwrap();
+                let sessions: Vec<SessionInfo> = guard
+                    .values()
+                    .map(|s| SessionInfo {
+                        id: s.id().to_owned(),
+                        name: s.name().map(|n| n.to_owned()),
+                        cwd: s.cwd().map(|c| c.to_owned()),
+                        pty_count: s.pty_count(),
+                    })
+                    .collect();
+                Ok(ServerMessage::SessionsListed { sessions })
+            }
         }
-    }
-
-    /// Attach an additional PTY to an existing session.
-    pub fn attach_pty(&self, req: AttachPtyRequest) -> Result<AttachPtyResponse, String> {
-        let mut guard = self.sessions.lock().unwrap();
-        let session = guard
-            .get_mut(&req.session_id)
-            .ok_or_else(|| format!("session not found: {}", req.session_id))?;
-
-        let shell = default_shell();
-        let pty_id = session.attach_pty(&shell, req.cwd.as_deref());
-
-        log::info!("PTY {} attached to session {}", pty_id, req.session_id);
-        Ok(AttachPtyResponse { pty_id })
-    }
-
-    /// Write input bytes to a specific PTY.
-    pub fn write_pty(&self, req: PtyInputRequest) -> Result<(), String> {
-        let mut guard = self.sessions.lock().unwrap();
-        let session = guard
-            .get_mut(&req.session_id)
-            .ok_or_else(|| format!("session not found: {}", req.session_id))?;
-        session.write_pty(&req.pty_id, &req.data)
-    }
-
-    /// Resize a PTY.
-    pub fn resize_pty(&self, req: PtyResizeRequest) -> Result<(), String> {
-        let mut guard = self.sessions.lock().unwrap();
-        let session = guard
-            .get_mut(&req.session_id)
-            .ok_or_else(|| format!("session not found: {}", req.session_id))?;
-        session.resize_pty(&req.pty_id, req.rows, req.cols)
-    }
-
-    /// Destroy a session and all its PTYs.
-    pub fn destroy_session(&self, req: DestroySessionRequest) -> Result<(), String> {
-        let mut guard = self.sessions.lock().unwrap();
-        guard
-            .remove(&req.session_id)
-            .ok_or_else(|| format!("session not found: {}", req.session_id))?;
-
-        log::info!("Session destroyed: {}", req.session_id);
-        Ok(())
-    }
-
-    /// List all active sessions.
-    pub fn list_sessions(&self) -> ListSessionsResponse {
-        let guard = self.sessions.lock().unwrap();
-        let sessions: Vec<SessionInfo> = guard
-            .values()
-            .map(|s| SessionInfo {
-                id: s.id().to_owned(),
-                name: s.name().map(|n| n.to_owned()),
-                cwd: s.cwd().map(|c| c.to_owned()),
-                pty_count: s.pty_count(),
-            })
-            .collect();
-        ListSessionsResponse { sessions }
     }
 }
 

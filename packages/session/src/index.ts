@@ -1,16 +1,9 @@
 import { ref, type Ref } from "vue";
-import { listen } from "@tauri-apps/api/event";
-import {
-  createSession as apiCreateSession,
-  attachPty as apiAttachPty,
-  destroySession as apiDestroySession,
-} from "@tum/core";
+import { send, onEvent } from "@tum/core";
 import { TumTerminal, type TerminalOptions } from "@tum/terminal";
 import type {
-  PtyOutputEvent,
-  PtyExitEvent,
-  SessionDestroyedEvent,
-  CreateSessionRequest,
+  ServerEvent,
+  SessionInfo,
 } from "@tum/core";
 
 /** A single terminal tab/pane within a session, backed by a TumTerminal. */
@@ -47,41 +40,48 @@ export function useSessionStore() {
     if (initialised) return;
     initialised = true;
 
-    void listen<string>("pty:output", (event) => {
-      const parsed: PtyOutputEvent = JSON.parse(event.payload);
-      for (const session of sessions.value) {
-        if (session.id === parsed.session_id) {
-          for (const tab of session.tabs) {
-            if (tab.ptyId === parsed.pty_id) {
-              tab.terminal.writeOutput(parsed);
-              return;
+    void onEvent((event: ServerEvent) => {
+      switch (event.kind) {
+        case "pty_output": {
+          const { session_id, pty_id, data } = event.data;
+          for (const session of sessions.value) {
+            if (session.id === session_id) {
+              for (const tab of session.tabs) {
+                if (tab.ptyId === pty_id) {
+                  tab.terminal.writeOutput({ session_id, pty_id, data });
+                  return;
+                }
+              }
             }
           }
+          break;
+        }
+
+        case "pty_exit": {
+          const { session_id, pty_id } = event.data;
+          const session = sessions.value.find((s) => s.id === session_id);
+          if (!session) break;
+
+          const idx = session.tabs.findIndex((t) => t.ptyId === pty_id);
+          if (idx === -1) break;
+
+          session.tabs[idx].terminal.dispose();
+          session.tabs.splice(idx, 1);
+          break;
+        }
+
+        case "session_destroyed": {
+          const { session_id } = event.data;
+          const idx = sessions.value.findIndex((s) => s.id === session_id);
+          if (idx === -1) break;
+
+          for (const tab of sessions.value[idx].tabs) {
+            tab.terminal.dispose();
+          }
+          sessions.value.splice(idx, 1);
+          break;
         }
       }
-    });
-
-    void listen<string>("pty:exit", (event) => {
-      const parsed: PtyExitEvent = JSON.parse(event.payload);
-      const session = sessions.value.find((s) => s.id === parsed.session_id);
-      if (!session) return;
-
-      const idx = session.tabs.findIndex((t) => t.ptyId === parsed.pty_id);
-      if (idx === -1) return;
-
-      session.tabs[idx].terminal.dispose();
-      session.tabs.splice(idx, 1);
-    });
-
-    void listen<string>("session:destroyed", (event) => {
-      const parsed: SessionDestroyedEvent = JSON.parse(event.payload);
-      const idx = sessions.value.findIndex((s) => s.id === parsed.session_id);
-      if (idx === -1) return;
-
-      for (const tab of sessions.value[idx].tabs) {
-        tab.terminal.dispose();
-      }
-      sessions.value.splice(idx, 1);
     });
   }
 
@@ -92,21 +92,30 @@ export function useSessionStore() {
    * mount a terminal widget.
    */
   async function create(
-    opts: CreateSessionRequest,
+    opts: { name?: string; cwd?: string; command?: string },
   ): Promise<{ session: SessionEntry; ptyId: string }> {
     await ensureListeners();
 
-    const res = await apiCreateSession(opts);
+    const resp = await send({
+      kind: "create_session",
+      data: { name: opts.name, cwd: opts.cwd, command: opts.command },
+    });
+
+    if (resp.kind !== "session_created") {
+      throw new Error(`Unexpected response: ${resp.kind}`);
+    }
+
+    const { session_id, pty_id } = resp.data;
 
     const entry: SessionEntry = {
-      id: res.session_id,
+      id: session_id,
       name: opts.name ?? null,
       tabs: [],
     };
 
     sessions.value.push(entry);
 
-    return { session: entry, ptyId: res.pty_id };
+    return { session: entry, ptyId: pty_id };
   }
 
   /**
@@ -144,13 +153,24 @@ export function useSessionStore() {
    * The caller should follow up with `mountTab` to render the new PTY.
    */
   async function attachTab(sessionId: string, cwd?: string): Promise<string> {
-    const res = await apiAttachPty({ session_id: sessionId, cwd });
-    return res.pty_id;
+    const resp = await send({
+      kind: "attach_pty",
+      data: { session_id: sessionId, cwd },
+    });
+
+    if (resp.kind !== "pty_attached") {
+      throw new Error(`Unexpected response: ${resp.kind}`);
+    }
+
+    return resp.data.pty_id;
   }
 
   /** Destroy a session and all its PTYs. */
   async function destroy(sessionId: string): Promise<void> {
-    await apiDestroySession({ session_id: sessionId });
+    await send({
+      kind: "destroy_session",
+      data: { session_id: sessionId },
+    });
   }
 
   /** Get a session by ID. */

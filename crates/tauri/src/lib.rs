@@ -1,50 +1,25 @@
 //! Tauri application entry point.
 //!
-//! Registers IPC command handlers for the session manager and sets up
-//! managed state, event forwarding, and the Tauri runtime.
+//! Registers a single `dispatch` IPC command for all frontend→backend
+//! communication and forwards backend events to the frontend through a
+//! single `ipc:event` channel.
 
 use std::sync::Arc;
 use tauri::Emitter;
 use tum_core::AppState;
-use tum_ipc::*;
+use tum_ipc::{ClientMessage, ServerMessage};
 
+/// Single entry point for all frontend requests.
+///
+/// Replaces the previous per-operation commands (`create_session`,
+/// `attach_pty`, etc.) with a unified dispatcher that routes based on
+/// the message kind.
 #[tauri::command]
-fn create_session(
+fn dispatch(
     state: tauri::State<'_, Arc<AppState>>,
-    req: CreateSessionRequest,
-) -> CreateSessionResponse {
-    state.sessions.create_session(req)
-}
-
-#[tauri::command]
-fn attach_pty(
-    state: tauri::State<'_, Arc<AppState>>,
-    req: AttachPtyRequest,
-) -> Result<AttachPtyResponse, String> {
-    state.sessions.attach_pty(req)
-}
-
-#[tauri::command]
-fn write_pty(state: tauri::State<'_, Arc<AppState>>, req: PtyInputRequest) -> Result<(), String> {
-    state.sessions.write_pty(req)
-}
-
-#[tauri::command]
-fn resize_pty(state: tauri::State<'_, Arc<AppState>>, req: PtyResizeRequest) -> Result<(), String> {
-    state.sessions.resize_pty(req)
-}
-
-#[tauri::command]
-fn destroy_session(
-    state: tauri::State<'_, Arc<AppState>>,
-    req: DestroySessionRequest,
-) -> Result<(), String> {
-    state.sessions.destroy_session(req)
-}
-
-#[tauri::command]
-fn list_sessions(state: tauri::State<'_, Arc<AppState>>) -> ListSessionsResponse {
-    state.sessions.list_sessions()
+    message: ClientMessage,
+) -> Result<ServerMessage, String> {
+    state.handle_message(message)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -57,37 +32,37 @@ pub fn run() {
         .setup(move |app| {
             // Forward backend events to the Tauri frontend.
             //
-            // The session manager emits JSON-serialised events on the
-            // internal event bus.  We subscribe and re-emit them via
-            // Tauri's `emit` so the frontend can listen.
+            // All events (pty:output, pty:exit, session:destroyed) are
+            // forwarded through a single `ipc:event` channel.  The frontend
+            // discriminates on the `kind` field of the JSON payload.
             let app_handle = app.handle().clone();
-            let app_handle2 = app.handle().clone();
-            let app_handle3 = app.handle().clone();
 
             let bus = &app_state.event_bus;
 
-            bus.subscribe("pty:output", move |_event, payload| {
-                let _ = app_handle.emit("pty:output", payload);
+            bus.subscribe("pty:output", {
+                let h = app_handle.clone();
+                move |_event, payload| {
+                    let _ = h.emit("ipc:event", payload);
+                }
             });
 
-            bus.subscribe("pty:exit", move |_event, payload| {
-                let _ = app_handle2.emit("pty:exit", payload);
+            bus.subscribe("pty:exit", {
+                let h = app_handle.clone();
+                move |_event, payload| {
+                    let _ = h.emit("ipc:event", payload);
+                }
             });
 
-            bus.subscribe("session:destroyed", move |_event, payload| {
-                let _ = app_handle3.emit("session:destroyed", payload);
+            bus.subscribe("session:destroyed", {
+                let h = app_handle.clone();
+                move |_event, payload| {
+                    let _ = h.emit("ipc:event", payload);
+                }
             });
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            create_session,
-            attach_pty,
-            write_pty,
-            resize_pty,
-            destroy_session,
-            list_sessions,
-        ])
+        .invoke_handler(tauri::generate_handler![dispatch])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

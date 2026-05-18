@@ -5,6 +5,7 @@
 //! Tauri managed state.
 
 use tum_events::{shared_event_bus, SharedEventBus};
+use tum_ipc::{ClientMessage, ServerMessage};
 use tum_session::SharedSessionManager;
 
 /// Application state shared across all Tauri command handlers.
@@ -18,12 +19,17 @@ impl AppState {
     /// manager together.
     pub fn new() -> Self {
         let event_bus = shared_event_bus();
-        let sessions = SessionManager::new(event_bus.clone());
+        let sessions = std::sync::Arc::new(SessionManager::new(event_bus.clone()));
 
         Self {
             event_bus,
-            sessions: std::sync::Arc::new(sessions),
+            sessions,
         }
+    }
+
+    /// Delegate a client message to the session manager.
+    pub fn handle_message(&self, msg: ClientMessage) -> Result<ServerMessage, String> {
+        self.sessions.handle_message(msg)
     }
 }
 

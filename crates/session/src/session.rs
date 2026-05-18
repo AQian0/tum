@@ -4,7 +4,7 @@ use pty::{spawn_pty, PtyProcess};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tum_events::SharedEventBus;
-use tum_ipc::{PtyExitEvent, PtyOutputEvent};
+use tum_ipc::ServerEvent;
 use uuid::Uuid;
 
 /// A handle to a single PTY within a session.
@@ -131,9 +131,6 @@ impl Session {
 
         // Take the reader out of PtyProcess for the reader thread.
         let reader = std::mem::replace(&mut pty.reader, {
-            // We need a dummy channel.  Since PtyProcess is moved into a
-            // Mutex immediately after spawning, we use a placeholder that
-            // will never be read from.
             let (_tx, rx) = std::sync::mpsc::channel();
             rx
         });
@@ -143,7 +140,7 @@ impl Session {
             loop {
                 match reader.recv() {
                     Ok(data) => {
-                        if let Ok(json) = serde_json::to_string(&PtyOutputEvent {
+                        if let Ok(json) = serde_json::to_string(&ServerEvent::PtyOutput {
                             session_id: sid.clone(),
                             pty_id: pid.clone(),
                             data,
@@ -155,7 +152,7 @@ impl Session {
                 }
             }
 
-            if let Ok(json) = serde_json::to_string(&PtyExitEvent {
+            if let Ok(json) = serde_json::to_string(&ServerEvent::PtyExit {
                 session_id: sid.clone(),
                 pty_id: pid.clone(),
                 exit_code: 0,

@@ -3,8 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { writePty, resizePty } from "@tum/core";
-import type { PtyInputRequest, PtyOutputEvent, PtyResizeRequest } from "@tum/core";
+import { send } from "@tum/core";
 
 const DEFAULT_THEME = {
   background: "#0d0e14",
@@ -48,6 +47,13 @@ export interface TerminalOptions {
   /** Initial dimensions (default 80×24). */
   rows?: number;
   cols?: number;
+}
+
+/** Payload delivered to {@link TumTerminal.writeOutput}. */
+export interface PtyOutputPayload {
+  session_id: string;
+  pty_id: string;
+  data: number[];
 }
 
 export class TumTerminal {
@@ -106,9 +112,9 @@ export class TumTerminal {
   }
 
   /** Write PTY output to the terminal display. */
-  writeOutput(event: PtyOutputEvent): void {
-    if (event.session_id === this.sessionId && event.pty_id === this.ptyId) {
-      this.xterm.write(new Uint8Array(event.data));
+  writeOutput(payload: PtyOutputPayload): void {
+    if (payload.session_id === this.sessionId && payload.pty_id === this.ptyId) {
+      this.xterm.write(new Uint8Array(payload.data));
     }
   }
 
@@ -209,23 +215,25 @@ export class TumTerminal {
     const encoder = new TextEncoder();
     const bytes = Array.from(encoder.encode(data));
 
-    const req: PtyInputRequest = {
-      session_id: this.sessionId,
-      pty_id: this.ptyId,
-      data: bytes,
-    };
-
-    writePty(req).catch((err) => console.error("Failed to write to PTY:", err));
+    send({
+      kind: "pty_input",
+      data: {
+        session_id: this.sessionId,
+        pty_id: this.ptyId,
+        data: bytes,
+      },
+    }).catch((err) => console.error("Failed to write to PTY:", err));
   }
 
   private handleResize(rows: number, cols: number): void {
-    const req: PtyResizeRequest = {
-      session_id: this.sessionId,
-      pty_id: this.ptyId,
-      rows,
-      cols,
-    };
-
-    resizePty(req).catch((err) => console.error("Failed to resize PTY:", err));
+    send({
+      kind: "pty_resize",
+      data: {
+        session_id: this.sessionId,
+        pty_id: this.ptyId,
+        rows,
+        cols,
+      },
+    }).catch((err) => console.error("Failed to resize PTY:", err));
   }
 }
