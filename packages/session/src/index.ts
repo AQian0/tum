@@ -1,10 +1,9 @@
 import { ref, type Ref } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import {
   createSession as apiCreateSession,
   attachPty as apiAttachPty,
   destroySession as apiDestroySession,
-  listSessions as apiListSessions,
 } from "@tum/core";
 import { TumTerminal, type TerminalOptions } from "@tum/terminal";
 import type {
@@ -32,14 +31,6 @@ export interface SessionEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Global listener teardown helpers
-// ---------------------------------------------------------------------------
-
-let unlistenOutput: UnlistenFn | null = null;
-let unlistenExit: UnlistenFn | null = null;
-let unlistenDestroyed: UnlistenFn | null = null;
-
-// ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
 
@@ -65,7 +56,7 @@ export function useSessionStore() {
     initialised = true;
 
     // Route PTY output events to the correct terminal tab.
-    unlistenOutput = await listen<string>("pty:output", (event) => {
+    void listen<string>("pty:output", (event) => {
       const parsed: PtyOutputEvent = JSON.parse(event.payload);
       for (const session of sessions.value) {
         if (session.id === parsed.session_id) {
@@ -80,7 +71,7 @@ export function useSessionStore() {
     });
 
     // When a PTY exits, remove its tab from the session.
-    unlistenExit = await listen<string>("pty:exit", (event) => {
+    void listen<string>("pty:exit", (event) => {
       const parsed: PtyExitEvent = JSON.parse(event.payload);
       const session = sessions.value.find((s) => s.id === parsed.session_id);
       if (!session) return;
@@ -93,7 +84,7 @@ export function useSessionStore() {
     });
 
     // When a session is destroyed, remove it from the list.
-    unlistenDestroyed = await listen<string>("session:destroyed", (event) => {
+    void listen<string>("session:destroyed", (event) => {
       const parsed: SessionDestroyedEvent = JSON.parse(event.payload);
       const idx = sessions.value.findIndex((s) => s.id === parsed.session_id);
       if (idx === -1) return;
@@ -211,3 +202,5 @@ export function getSessionStore() {
   }
   return _globalStore;
 }
+
+
