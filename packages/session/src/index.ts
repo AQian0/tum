@@ -159,6 +159,17 @@ export function useSessionStore() {
       kind: "destroy_session",
       data: { session_id: sessionId },
     });
+
+    // Clean up local state eagerly so the UI responds immediately.
+    // (The backend now also broadcasts session_destroyed, but this
+    // avoids any race with the async event channel.)
+    const idx = sessions.value.findIndex((s) => s.id === sessionId);
+    if (idx !== -1) {
+      for (const tab of sessions.value[idx].tabs) {
+        tab.terminal.dispose();
+      }
+      sessions.value.splice(idx, 1);
+    }
   }
 
   /** Get a session by ID. */

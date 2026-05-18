@@ -153,6 +153,16 @@ impl SessionManager {
                     .remove(&session_id)
                     .ok_or_else(|| format!("session not found: {session_id}"))?;
                 log::info!("Session destroyed: {session_id}");
+
+                // Broadcast so the frontend can clean up its local state.
+                if let Ok(json) =
+                    serde_json::to_string(&ServerEvent::SessionDestroyed {
+                        session_id: session_id.clone(),
+                    })
+                {
+                    self.event_bus.emit("session:destroyed", &json);
+                }
+
                 Ok(ServerMessage::Ack)
             }
 

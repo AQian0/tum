@@ -66,35 +66,13 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
   async function closeTab(sessionId: string): Promise<void> {
     const list = sessions.value;
     const idx = list.findIndex((s) => s.id === sessionId);
+    if (idx === -1) return;
 
     // If closing the active tab, switch to a neighbour first.
-    match({
-      isActive: activeSessionId.value === sessionId,
-      length: list.length,
-      idx,
-    } as const)
-      .with({ isActive: false }, () => {
-        // Closing a background tab — no switch needed.
-      })
-      .with(
-        { isActive: true, length: P.when((n) => n > 1), idx: P.when((i) => i > 0) },
-        () => {
-          // Active tab with a tab to the left → switch left.
-          const newIdx = idx - 1;
-          detachCurrent();
-          attachSession(list[newIdx].id);
-          activeSessionId.value = list[newIdx].id;
-        },
-      )
-      .with({ isActive: true, length: P.when((n) => n > 1) }, () => {
-        // Active tab with no left neighbour → switch right.
-        detachCurrent();
-        attachSession(list[1].id);
-        activeSessionId.value = list[1].id;
-      })
-      .otherwise(() => {
-        // Last tab being closed — handled by the fallback below.
-      });
+    if (activeSessionId.value === sessionId && list.length > 1) {
+      const neighbourIdx = idx > 0 ? idx - 1 : 1;
+      switchTab(list[neighbourIdx].id);
+    }
 
     await store.destroy(sessionId);
 
