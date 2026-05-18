@@ -15,6 +15,7 @@
     "vue": "catalog:",
     "@tum/terminal": "workspace:*",
     "@tum/core": "workspace:*",
+    "@tum/keymap": "workspace:*",
     "@tum/session": "workspace:*",
     "@tauri-apps/api": "catalog:"
   },

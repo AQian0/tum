@@ -16,6 +16,7 @@
   "references": [
     { "path": "./packages/app" },
     { "path": "./packages/core" },
+    { "path": "./packages/keymap" },
     { "path": "./packages/session" },
     { "path": "./packages/terminal" }
   ]
