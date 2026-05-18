@@ -18,6 +18,9 @@ crates/tauri/gen/
 # Only workspace root should have Cargo.lock
 crates/*/Cargo.lock
 
+# Agent skills
+.agents/
+
 # Editor directories and files
 .vscode/
 .idea
