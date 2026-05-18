@@ -4,8 +4,7 @@ import TabBar from "./components/TabBar.vue";
 import { useTabs } from "./composables/useTabs";
 
 const viewportRef = ref<HTMLElement | null>(null);
-const { sessions, activeSessionId, addTab, switchTab, closeTab } =
-  useTabs(viewportRef);
+const { sessions, activeSessionId, addTab, switchTab, closeTab } = useTabs(viewportRef);
 
 onMounted(async () => {
   await addTab("bash");

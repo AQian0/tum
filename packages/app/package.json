@@ -1,7 +1,7 @@
 {
   "name": "@tum/app",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,12 +12,12 @@
     "tauri:build": "cd ../../crates/tauri && tauri build"
   },
   "dependencies": {
-    "vue": "catalog:",
-    "@tum/terminal": "workspace:*",
+    "@tauri-apps/api": "catalog:",
     "@tum/core": "workspace:*",
     "@tum/keymap": "workspace:*",
     "@tum/session": "workspace:*",
-    "@tauri-apps/api": "catalog:"
+    "@tum/terminal": "workspace:*",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",

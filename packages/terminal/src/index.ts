@@ -6,7 +6,6 @@ import "@xterm/xterm/css/xterm.css";
 import { writePty, resizePty } from "@tum/core";
 import type { PtyInputRequest, PtyOutputEvent, PtyResizeRequest } from "@tum/core";
 
-
 const DEFAULT_THEME = {
   background: "#0d0e14",
   foreground: "#c8c8d0",
@@ -32,7 +31,6 @@ const DEFAULT_THEME = {
   brightWhite: "#d5d6db",
 };
 
-
 export interface TerminalOptions {
   /** The DOM element to mount the terminal into. */
   parent: HTMLElement;
@@ -52,7 +50,6 @@ export interface TerminalOptions {
   cols?: number;
 }
 
-
 export class TumTerminal {
   private xterm: Terminal;
   private fitAddon: FitAddon;
@@ -71,8 +68,7 @@ export class TumTerminal {
       cursorStyle: "bar",
       fontSize: opts.fontSize ?? 14,
       fontFamily:
-        opts.fontFamily ??
-        "'JetBrains Mono', 'Fira Code', ui-monospace, Consolas, monospace",
+        opts.fontFamily ?? "'JetBrains Mono', 'Fira Code', ui-monospace, Consolas, monospace",
       theme: { ...DEFAULT_THEME, ...opts.theme },
     });
 
@@ -108,7 +104,6 @@ export class TumTerminal {
     };
     window.addEventListener("resize", this.resizeHandler);
   }
-
 
   /** Write PTY output to the terminal display. */
   writeOutput(event: PtyOutputEvent): void {
@@ -180,7 +175,6 @@ export class TumTerminal {
     });
   }
 
-
   /**
    * After FitAddon determines column/row count via floor, add one extra
    * row when the remaining vertical space exceeds half a character height
@@ -221,9 +215,7 @@ export class TumTerminal {
       data: bytes,
     };
 
-    writePty(req).catch((err) =>
-      console.error("Failed to write to PTY:", err),
-    );
+    writePty(req).catch((err) => console.error("Failed to write to PTY:", err));
   }
 
   private handleResize(rows: number, cols: number): void {
@@ -234,8 +226,6 @@ export class TumTerminal {
       cols,
     };
 
-    resizePty(req).catch((err) =>
-      console.error("Failed to resize PTY:", err),
-    );
+    resizePty(req).catch((err) => console.error("Failed to resize PTY:", err));
   }
 }

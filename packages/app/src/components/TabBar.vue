@@ -38,21 +38,21 @@ function tabLabel(s: SessionEntry): string {
       >
         <span class="overflow-hidden text-ellipsis">{{ tabLabel(s) }}</span>
         <span
-          class="flex items-center justify-center w-4 h-4 rounded-sm text-[11px] leading-none
-                 opacity-0 transition group-hover:opacity-60
-                 hover:opacity-100! hover:bg-border-hover hover:text-danger"
+          class="flex items-center justify-center w-4 h-4 rounded-sm text-[11px] leading-none opacity-0 transition group-hover:opacity-60 hover:opacity-100! hover:bg-border-hover hover:text-danger"
           :class="{ 'opacity-60': s.id === activeSessionId }"
           @click.stop="emit('close', s.id)"
           title="Close tab"
-        >&#x2715;</span>
+          >&#x2715;</span
+        >
       </button>
     </div>
 
     <button
-      class="px-3.5 text-base text-text-muted border-l border-border max-w-none
-             hover:text-accent transition-colors shrink-0"
+      class="px-3.5 text-base text-text-muted border-l border-border max-w-none hover:text-accent transition-colors shrink-0"
       @click="emit('add')"
       title="New tab"
-    >+</button>
+    >
+      +
+    </button>
   </div>
 </template>

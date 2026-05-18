@@ -18,7 +18,6 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
 
   let tabCounter = 0;
 
-
   function activeTerminal() {
     if (!activeSessionId.value) return null;
     const session = store.get(activeSessionId.value);
@@ -39,7 +38,6 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
       term.focus();
     }
   }
-
 
   async function addTab(name?: string): Promise<void> {
     detachCurrent();

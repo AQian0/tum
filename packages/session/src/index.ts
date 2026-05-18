@@ -13,7 +13,6 @@ import type {
   CreateSessionRequest,
 } from "@tum/core";
 
-
 /** A single terminal tab/pane within a session, backed by a TumTerminal. */
 export interface SessionTab {
   ptyId: string;
@@ -26,7 +25,6 @@ export interface SessionEntry {
   name: string | null;
   tabs: SessionTab[];
 }
-
 
 /**
  * Reactive session store for the tum terminal application.
@@ -87,7 +85,6 @@ export function useSessionStore() {
     });
   }
 
-
   /**
    * Create a new session with one PTY tab.
    *
@@ -146,10 +143,7 @@ export function useSessionStore() {
    *
    * The caller should follow up with `mountTab` to render the new PTY.
    */
-  async function attachTab(
-    sessionId: string,
-    cwd?: string,
-  ): Promise<string> {
+  async function attachTab(sessionId: string, cwd?: string): Promise<string> {
     const res = await apiAttachPty({ session_id: sessionId, cwd });
     return res.pty_id;
   }
@@ -179,7 +173,6 @@ export function useSessionStore() {
   };
 }
 
-
 let _globalStore: ReturnType<typeof useSessionStore> | null = null;
 
 /** Get or create a globally shared session store instance. */
@@ -189,5 +182,3 @@ export function getSessionStore() {
   }
   return _globalStore;
 }
-
-
