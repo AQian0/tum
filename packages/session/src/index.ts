@@ -13,9 +13,6 @@ import type {
   CreateSessionRequest,
 } from "@tum/core";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 /** A single terminal tab/pane within a session, backed by a TumTerminal. */
 export interface SessionTab {
@@ -30,9 +27,6 @@ export interface SessionEntry {
   tabs: SessionTab[];
 }
 
-// ---------------------------------------------------------------------------
-// Composable
-// ---------------------------------------------------------------------------
 
 /**
  * Reactive session store for the tum terminal application.
@@ -55,7 +49,6 @@ export function useSessionStore() {
     if (initialised) return;
     initialised = true;
 
-    // Route PTY output events to the correct terminal tab.
     void listen<string>("pty:output", (event) => {
       const parsed: PtyOutputEvent = JSON.parse(event.payload);
       for (const session of sessions.value) {
@@ -70,7 +63,6 @@ export function useSessionStore() {
       }
     });
 
-    // When a PTY exits, remove its tab from the session.
     void listen<string>("pty:exit", (event) => {
       const parsed: PtyExitEvent = JSON.parse(event.payload);
       const session = sessions.value.find((s) => s.id === parsed.session_id);
@@ -83,7 +75,6 @@ export function useSessionStore() {
       session.tabs.splice(idx, 1);
     });
 
-    // When a session is destroyed, remove it from the list.
     void listen<string>("session:destroyed", (event) => {
       const parsed: SessionDestroyedEvent = JSON.parse(event.payload);
       const idx = sessions.value.findIndex((s) => s.id === parsed.session_id);
@@ -96,7 +87,6 @@ export function useSessionStore() {
     });
   }
 
-  // --- Public API ---
 
   /**
    * Create a new session with one PTY tab.
@@ -189,9 +179,6 @@ export function useSessionStore() {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Global singleton
-// ---------------------------------------------------------------------------
 
 let _globalStore: ReturnType<typeof useSessionStore> | null = null;
 

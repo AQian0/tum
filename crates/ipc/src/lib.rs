@@ -5,11 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 
-// ---------------------------------------------------------------------------
-// Session commands (frontend → backend)
-// ---------------------------------------------------------------------------
-
-/// Create a new terminal session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     /// Optional human-readable name (e.g. "project-x").
@@ -27,7 +22,6 @@ pub struct CreateSessionResponse {
     pub pty_id: String,
 }
 
-/// Attach a new PTY (pane) to an existing session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachPtyRequest {
     pub session_id: String,
@@ -39,7 +33,6 @@ pub struct AttachPtyResponse {
     pub pty_id: String,
 }
 
-/// Write input to a PTY.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtyInputRequest {
     pub session_id: String,
@@ -48,7 +41,6 @@ pub struct PtyInputRequest {
     pub data: Vec<u8>,
 }
 
-/// Resize a PTY.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtyResizeRequest {
     pub session_id: String,
@@ -57,17 +49,11 @@ pub struct PtyResizeRequest {
     pub cols: u16,
 }
 
-/// Destroy / close a session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DestroySessionRequest {
     pub session_id: String,
 }
 
-// ---------------------------------------------------------------------------
-// Session commands (backend → frontend events)
-// ---------------------------------------------------------------------------
-
-/// The backend pushes PTY output to the frontend via this event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtyOutputEvent {
     pub session_id: String,
@@ -75,7 +61,6 @@ pub struct PtyOutputEvent {
     pub data: Vec<u8>,
 }
 
-/// A PTY has exited (shell process terminated).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtyExitEvent {
     pub session_id: String,
@@ -83,17 +68,11 @@ pub struct PtyExitEvent {
     pub exit_code: i32,
 }
 
-/// A session was destroyed (all PTYs closed).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionDestroyedEvent {
     pub session_id: String,
 }
 
-// ---------------------------------------------------------------------------
-// Session list / query
-// ---------------------------------------------------------------------------
-
-/// Summary of a single session returned in list queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub id: String,

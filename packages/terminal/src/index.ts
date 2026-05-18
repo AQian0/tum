@@ -6,9 +6,6 @@ import "@xterm/xterm/css/xterm.css";
 import { writePty, resizePty } from "@tum/core";
 import type { PtyInputRequest, PtyOutputEvent, PtyResizeRequest } from "@tum/core";
 
-// ---------------------------------------------------------------------------
-// Theme
-// ---------------------------------------------------------------------------
 
 const DEFAULT_THEME = {
   background: "#0d0e14",
@@ -35,9 +32,6 @@ const DEFAULT_THEME = {
   brightWhite: "#d5d6db",
 };
 
-// ---------------------------------------------------------------------------
-// Options
-// ---------------------------------------------------------------------------
 
 export interface TerminalOptions {
   /** The DOM element to mount the terminal into. */
@@ -58,9 +52,6 @@ export interface TerminalOptions {
   cols?: number;
 }
 
-// ---------------------------------------------------------------------------
-// TumTerminal
-// ---------------------------------------------------------------------------
 
 export class TumTerminal {
   private xterm: Terminal;
@@ -85,7 +76,6 @@ export class TumTerminal {
       theme: { ...DEFAULT_THEME, ...opts.theme },
     });
 
-    // Addons
     this.fitAddon = new FitAddon();
     this.xterm.loadAddon(this.fitAddon);
 
@@ -97,19 +87,16 @@ export class TumTerminal {
 
     this.xterm.loadAddon(new WebLinksAddon());
 
-    // Mount into DOM, then fit to container
     this.xterm.open(opts.parent);
     requestAnimationFrame(() => {
       this.fitAddon.fit();
       this.fillToEdge();
     });
 
-    // Welcome message
     if (opts.welcomeMessage) {
       this.xterm.writeln(opts.welcomeMessage);
     }
 
-    // I/O wiring
     this.xterm.onData((data) => this.handleInput(data));
     this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols));
 
@@ -122,7 +109,6 @@ export class TumTerminal {
     window.addEventListener("resize", this.resizeHandler);
   }
 
-  // -- public --
 
   /** Write PTY output to the terminal display. */
   writeOutput(event: PtyOutputEvent): void {
@@ -194,7 +180,6 @@ export class TumTerminal {
     });
   }
 
-  // -- private --
 
   /**
    * After FitAddon determines column/row count via floor, add one extra

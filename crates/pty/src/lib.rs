@@ -55,7 +55,11 @@ impl PtyProcess {
     /// Resize the PTY.
     pub fn resize(&mut self, rows: u16, cols: u16) -> Result<(), PtyError> {
         self.master
-            .resize(PtySize { rows, cols, ..Default::default() })
+            .resize(PtySize {
+                rows,
+                cols,
+                ..Default::default()
+            })
             .map_err(|e| PtyError::Resize(e.to_string()))
     }
 
@@ -82,7 +86,11 @@ pub fn spawn_pty(
     let pty_system = NativePtySystem::default();
 
     let pty_pair = pty_system
-        .openpty(PtySize { rows, cols, ..Default::default() })
+        .openpty(PtySize {
+            rows,
+            cols,
+            ..Default::default()
+        })
         .map_err(|e| PtyError::Spawn(e.to_string()))?;
 
     let mut cmd = CommandBuilder::new(command);
@@ -119,10 +127,10 @@ pub fn spawn_pty(
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => break,      // EOF – the child exited
+                Ok(0) => break, // EOF – the child exited
                 Ok(n) => {
                     if tx.send(buf[..n].to_vec()).is_err() {
-                        break;      // receiver dropped
+                        break; // receiver dropped
                     }
                 }
                 Err(_) => break,

@@ -27,8 +27,6 @@ onMounted(async () => {
 </template>
 
 <style>
-/* ---- global (unscoped) ---- */
-
 :root {
   --bg: #fff;
   --text: #6b6375;

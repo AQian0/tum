@@ -40,13 +40,7 @@ impl Session {
         let id = Uuid::new_v4().to_string();
         let alive_count = Arc::new(AtomicUsize::new(1));
 
-        let pty = Self::spawn_pty_inner(
-            &id,
-            &event_bus,
-            &alive_count,
-            shell,
-            cwd.as_deref(),
-        );
+        let pty = Self::spawn_pty_inner(&id, &event_bus, &alive_count, shell, cwd.as_deref());
 
         Self {
             id,
@@ -61,13 +55,7 @@ impl Session {
     /// Attach an additional PTY to this session.
     pub(crate) fn attach_pty(&self, shell: &str, cwd: Option<&str>) -> String {
         self.alive_count.fetch_add(1, Ordering::SeqCst);
-        let pty = Self::spawn_pty_inner(
-            &self.id,
-            &self.event_bus,
-            &self.alive_count,
-            shell,
-            cwd,
-        );
+        let pty = Self::spawn_pty_inner(&self.id, &self.event_bus, &self.alive_count, shell, cwd);
         let id = pty.id.clone();
         self.ptys.lock().unwrap().push(pty);
         id
@@ -100,8 +88,6 @@ impl Session {
         proc.resize(rows, cols).map_err(|e| e.to_string())
     }
 
-    // -- accessors --
-
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -124,8 +110,6 @@ impl Session {
         guard.first().map(|p| p.id.clone()).unwrap_or_default()
     }
 
-    // -- internals --
-
     /// Spawn a single PTY, wire up its reader thread to the event bus,
     /// and return a [`PtyHandle`].
     fn spawn_pty_inner(
@@ -137,8 +121,8 @@ impl Session {
     ) -> PtyHandle {
         let pty_id = Uuid::new_v4().to_string();
 
-        let mut pty = spawn_pty(shell, cwd, 24, 80)
-            .unwrap_or_else(|e| panic!("failed to spawn PTY: {e}"));
+        let mut pty =
+            spawn_pty(shell, cwd, 24, 80).unwrap_or_else(|e| panic!("failed to spawn PTY: {e}"));
 
         let sid = session_id.to_owned();
         let pid = pty_id.clone();
@@ -171,7 +155,6 @@ impl Session {
                 }
             }
 
-            // Emit exit event.
             if let Ok(json) = serde_json::to_string(&PtyExitEvent {
                 session_id: sid.clone(),
                 pty_id: pid.clone(),

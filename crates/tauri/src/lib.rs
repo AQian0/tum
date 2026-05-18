@@ -8,10 +8,6 @@ use tauri::Emitter;
 use tum_core::AppState;
 use tum_ipc::*;
 
-// ---------------------------------------------------------------------------
-// Tauri commands (called from the frontend via `invoke`)
-// ---------------------------------------------------------------------------
-
 #[tauri::command]
 fn create_session(
     state: tauri::State<'_, Arc<AppState>>,
@@ -29,18 +25,12 @@ fn attach_pty(
 }
 
 #[tauri::command]
-fn write_pty(
-    state: tauri::State<'_, Arc<AppState>>,
-    req: PtyInputRequest,
-) -> Result<(), String> {
+fn write_pty(state: tauri::State<'_, Arc<AppState>>, req: PtyInputRequest) -> Result<(), String> {
     state.sessions.write_pty(req)
 }
 
 #[tauri::command]
-fn resize_pty(
-    state: tauri::State<'_, Arc<AppState>>,
-    req: PtyResizeRequest,
-) -> Result<(), String> {
+fn resize_pty(state: tauri::State<'_, Arc<AppState>>, req: PtyResizeRequest) -> Result<(), String> {
     state.sessions.resize_pty(req)
 }
 
@@ -53,15 +43,9 @@ fn destroy_session(
 }
 
 #[tauri::command]
-fn list_sessions(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> ListSessionsResponse {
+fn list_sessions(state: tauri::State<'_, Arc<AppState>>) -> ListSessionsResponse {
     state.sessions.list_sessions()
 }
-
-// ---------------------------------------------------------------------------
-// Application setup
-// ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

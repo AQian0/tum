@@ -18,7 +18,6 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
 
   let tabCounter = 0;
 
-  // ---- internal helpers ----
 
   function activeTerminal() {
     if (!activeSessionId.value) return null;
@@ -41,7 +40,6 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
     }
   }
 
-  // ---- public API ----
 
   async function addTab(name?: string): Promise<void> {
     detachCurrent();

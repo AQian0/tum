@@ -65,38 +65,29 @@ impl SessionManager {
             let sessions = Arc::clone(&sessions);
             let bus = event_bus.clone();
             event_bus.subscribe("session:all_pty_exited", move |_event, payload| {
-                // payload is the raw JSON session_id from session.rs
                 let session_id = payload.to_owned();
                 let mut guard = sessions.lock().unwrap();
                 if guard.remove(&session_id).is_some() {
                     log::info!("Session auto-removed (all PTYs exited): {session_id}");
-                    if let Ok(json) = serde_json::to_string(&SessionDestroyedEvent {
-                        session_id,
-                    }) {
+                    if let Ok(json) = serde_json::to_string(&SessionDestroyedEvent { session_id }) {
                         bus.emit("session:destroyed", &json);
                     }
                 }
             });
         }
 
-        Self { sessions, event_bus }
+        Self {
+            sessions,
+            event_bus,
+        }
     }
-
-    // ------------------------------------------------------------------
-    // Public API – called from Tauri command handlers
-    // ------------------------------------------------------------------
 
     /// Create a new session with a single PTY.
     pub fn create_session(&self, req: CreateSessionRequest) -> CreateSessionResponse {
         let shell = req.command.unwrap_or_else(default_shell);
         let cwd = req.cwd.clone();
 
-        let session = Session::new(
-            self.event_bus.clone(),
-            req.name.clone(),
-            cwd,
-            &shell,
-        );
+        let session = Session::new(self.event_bus.clone(), req.name.clone(), cwd, &shell);
 
         let id = session.id().to_owned();
         let pty_id = session.first_pty_id();
