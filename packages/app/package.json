@@ -20,10 +20,12 @@
     "@tauri-apps/api": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/tsconfig": "catalog:",
+    "tailwindcss": "^4.3.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vue-tsc": "catalog:"

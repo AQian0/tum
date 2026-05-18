@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app-bg: #0d0e14;
+  --color-surface: #12131a;
+  --color-surface-hover: #1a1b26;
+  --color-border: #1e1f2a;
+  --color-border-hover: #2a2b3a;
+  --color-text-muted: #6b6375;
+  --color-text-secondary: #9ca3af;
+  --color-text-hover: #c8c8d0;
+  --color-text-active: #e0e0e8;
+  --color-accent: #c084fc;
+  --color-danger: #f7768e;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+}
+
+/*
+ * Base layer: global resets and element defaults that Tailwind's preflight
+ * doesn't cover.
+ */
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html,
+  body {
+    overflow: hidden;
+    background-color: var(--color-app-bg);
+  }
+}
+
+/*
+ * Utility for hiding scrollbars while keeping scroll functionality.
+ */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

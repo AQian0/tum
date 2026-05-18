@@ -13,7 +13,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="flex flex-col w-full h-full bg-app-bg">
     <TabBar
       :sessions="sessions"
       :activeSessionId="activeSessionId"
@@ -22,64 +22,16 @@ onMounted(async () => {
       @add="addTab()"
     />
 
-    <div ref="viewportRef" class="terminal-viewport" />
+    <div ref="viewportRef" class="flex-1 overflow-hidden bg-app-bg" />
   </div>
 </template>
 
 <style>
-:root {
-  --bg: #fff;
-  --text: #6b6375;
-
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16171d;
-    --text: #9ca3af;
-  }
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  background-color: #0d0e14;
-}
-
-#app {
-  width: 100vw;
-  height: 100vh;
-}
-
 .xterm-viewport {
   background-color: #0d0e14 !important;
 }
 
 .xterm {
   background-color: #0d0e14 !important;
-}
-</style>
-
-<style scoped>
-.app-shell {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-}
-
-.terminal-viewport {
-  flex: 1;
-  overflow: hidden;
-  background-color: #0d0e14;
 }
 </style>

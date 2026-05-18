@@ -18,17 +18,30 @@ function tabLabel(s: SessionEntry): string {
 </script>
 
 <template>
-  <div class="tab-bar">
-    <div class="tabs">
+  <div
+    class="flex items-stretch h-9 bg-surface border-b border-border select-none shrink-0 overflow-hidden"
+  >
+    <div class="flex flex-1 overflow-x-auto scrollbar-none">
       <button
         v-for="s in sessions"
         :key="s.id"
-        :class="['tab', { active: s.id === activeSessionId }]"
+        :class="[
+          'group relative flex items-center gap-1.5 px-3 h-full border-0 bg-transparent',
+          'font-mono text-[13px] cursor-pointer whitespace-nowrap',
+          'transition-colors shrink-0 max-w-[180px]',
+          'text-text-muted hover:bg-surface-hover hover:text-text-hover',
+          s.id === activeSessionId
+            ? `bg-surface-hover text-text-active after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-accent after:content-['']`
+            : '',
+        ]"
         @click="emit('switch', s.id)"
       >
-        <span class="tab-label">{{ tabLabel(s) }}</span>
+        <span class="overflow-hidden text-ellipsis">{{ tabLabel(s) }}</span>
         <span
-          class="tab-close"
+          class="flex items-center justify-center w-4 h-4 rounded-sm text-[11px] leading-none
+                 opacity-0 transition group-hover:opacity-60
+                 hover:opacity-100! hover:bg-border-hover hover:text-danger"
+          :class="{ 'opacity-60': s.id === activeSessionId }"
           @click.stop="emit('close', s.id)"
           title="Close tab"
         >&#x2715;</span>
@@ -36,114 +49,10 @@ function tabLabel(s: SessionEntry): string {
     </div>
 
     <button
-      class="tab tab-add"
+      class="px-3.5 text-base text-text-muted border-l border-border max-w-none
+             hover:text-accent transition-colors shrink-0"
       @click="emit('add')"
       title="New tab"
     >+</button>
   </div>
 </template>
-
-<style scoped>
-.tab-bar {
-  display: flex;
-  align-items: stretch;
-  height: 36px;
-  background: #12131a;
-  border-bottom: 1px solid #1e1f2a;
-  user-select: none;
-  -webkit-user-select: none;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.tabs {
-  display: flex;
-  flex: 1;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  height: 100%;
-  border: none;
-  background: transparent;
-  color: #6b6375;
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  position: relative;
-  transition: color 0.15s, background 0.15s;
-  flex-shrink: 0;
-  max-width: 180px;
-}
-
-.tab:hover {
-  background: #1a1b26;
-  color: #c8c8d0;
-}
-
-.tab.active {
-  background: #1a1b26;
-  color: #e0e0e8;
-}
-
-.tab.active::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #c084fc;
-}
-
-.tab-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tab-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
-}
-
-.tab:hover .tab-close,
-.tab.active .tab-close {
-  opacity: 0.6;
-}
-
-.tab-close:hover {
-  opacity: 1 !important;
-  background: #2a2b3a;
-  color: #f7768e;
-}
-
-.tab-add {
-  padding: 0 14px;
-  font-size: 16px;
-  color: #6b6375;
-  border-left: 1px solid #1e1f2a;
-  max-width: none;
-}
-
-.tab-add:hover {
-  color: #c084fc;
-}
-</style>
