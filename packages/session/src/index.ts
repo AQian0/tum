@@ -1,10 +1,8 @@
 import { ref, type Ref } from "vue";
+import { match } from "ts-pattern";
 import { send, onEvent } from "@tum/core";
 import { TumTerminal, type TerminalOptions } from "@tum/terminal";
-import type {
-  ServerEvent,
-  SessionInfo,
-} from "@tum/core";
+import type { ServerEvent } from "@tum/core";
 
 /** A single terminal tab/pane within a session, backed by a TumTerminal. */
 export interface SessionTab {
@@ -41,9 +39,8 @@ export function useSessionStore() {
     initialised = true;
 
     void onEvent((event: ServerEvent) => {
-      switch (event.kind) {
-        case "pty_output": {
-          const { session_id, pty_id, data } = event.data;
+      match(event)
+        .with({ kind: "pty_output" }, ({ data: { session_id, pty_id, data } }) => {
           for (const session of sessions.value) {
             if (session.id === session_id) {
               for (const tab of session.tabs) {
@@ -54,34 +51,27 @@ export function useSessionStore() {
               }
             }
           }
-          break;
-        }
-
-        case "pty_exit": {
-          const { session_id, pty_id } = event.data;
+        })
+        .with({ kind: "pty_exit" }, ({ data: { session_id, pty_id } }) => {
           const session = sessions.value.find((s) => s.id === session_id);
-          if (!session) break;
+          if (!session) return;
 
           const idx = session.tabs.findIndex((t) => t.ptyId === pty_id);
-          if (idx === -1) break;
+          if (idx === -1) return;
 
           session.tabs[idx].terminal.dispose();
           session.tabs.splice(idx, 1);
-          break;
-        }
-
-        case "session_destroyed": {
-          const { session_id } = event.data;
+        })
+        .with({ kind: "session_destroyed" }, ({ data: { session_id } }) => {
           const idx = sessions.value.findIndex((s) => s.id === session_id);
-          if (idx === -1) break;
+          if (idx === -1) return;
 
           for (const tab of sessions.value[idx].tabs) {
             tab.terminal.dispose();
           }
           sessions.value.splice(idx, 1);
-          break;
-        }
-      }
+        })
+        .exhaustive();
     });
   }
 
@@ -101,21 +91,19 @@ export function useSessionStore() {
       data: { name: opts.name, cwd: opts.cwd, command: opts.command },
     });
 
-    if (resp.kind !== "session_created") {
-      throw new Error(`Unexpected response: ${resp.kind}`);
-    }
-
-    const { session_id, pty_id } = resp.data;
-
-    const entry: SessionEntry = {
-      id: session_id,
-      name: opts.name ?? null,
-      tabs: [],
-    };
-
-    sessions.value.push(entry);
-
-    return { session: entry, ptyId: pty_id };
+    return match(resp)
+      .with({ kind: "session_created" }, ({ data: { session_id, pty_id } }) => {
+        const entry: SessionEntry = {
+          id: session_id,
+          name: opts.name ?? null,
+          tabs: [],
+        };
+        sessions.value.push(entry);
+        return { session: entry, ptyId: pty_id };
+      })
+      .otherwise((other) => {
+        throw new Error(`Unexpected response: ${other.kind}`);
+      });
   }
 
   /**
@@ -158,11 +146,11 @@ export function useSessionStore() {
       data: { session_id: sessionId, cwd },
     });
 
-    if (resp.kind !== "pty_attached") {
-      throw new Error(`Unexpected response: ${resp.kind}`);
-    }
-
-    return resp.data.pty_id;
+    return match(resp)
+      .with({ kind: "pty_attached" }, ({ data: { pty_id } }) => pty_id)
+      .otherwise((other) => {
+        throw new Error(`Unexpected response: ${other.kind}`);
+      });
   }
 
   /** Destroy a session and all its PTYs. */

@@ -1,3 +1,4 @@
+import { match, P } from "ts-pattern";
 import { shallowRef, watch, type Ref } from "vue";
 import { getSessionStore } from "@tum/session";
 import type { SessionEntry } from "@tum/session";
@@ -63,18 +64,37 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
   }
 
   async function closeTab(sessionId: string): Promise<void> {
-    // If closing the active tab, switch to another tab first.
-    if (activeSessionId.value === sessionId) {
-      const list = sessions.value;
-      const idx = list.findIndex((s) => s.id === sessionId);
-      if (list.length > 1) {
-        // Prefer the tab to the left, otherwise the one to the right.
-        const newIdx = idx > 0 ? idx - 1 : 1;
+    const list = sessions.value;
+    const idx = list.findIndex((s) => s.id === sessionId);
+
+    // If closing the active tab, switch to a neighbour first.
+    match({
+      isActive: activeSessionId.value === sessionId,
+      length: list.length,
+      idx,
+    } as const)
+      .with({ isActive: false }, () => {
+        // Closing a background tab — no switch needed.
+      })
+      .with(
+        { isActive: true, length: P.when((n) => n > 1), idx: P.when((i) => i > 0) },
+        () => {
+          // Active tab with a tab to the left → switch left.
+          const newIdx = idx - 1;
+          detachCurrent();
+          attachSession(list[newIdx].id);
+          activeSessionId.value = list[newIdx].id;
+        },
+      )
+      .with({ isActive: true, length: P.when((n) => n > 1) }, () => {
+        // Active tab with no left neighbour → switch right.
         detachCurrent();
-        attachSession(list[newIdx].id);
-        activeSessionId.value = list[newIdx].id;
-      }
-    }
+        attachSession(list[1].id);
+        activeSessionId.value = list[1].id;
+      })
+      .otherwise(() => {
+        // Last tab being closed — handled by the fallback below.
+      });
 
     await store.destroy(sessionId);
 
@@ -89,15 +109,18 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
   watch(
     () => sessions.value.length,
     (len) => {
-      if (len === 0) {
-        activeSessionId.value = null;
-        return;
-      }
-      if (activeSessionId.value && !store.get(activeSessionId.value)) {
-        const next = sessions.value[Math.min(sessions.value.length - 1, len - 1)];
-        attachSession(next.id);
-        activeSessionId.value = next.id;
-      }
+      match({ len, activeId: activeSessionId.value } as const)
+        .with({ len: 0 }, () => {
+          activeSessionId.value = null;
+        })
+        .with({ activeId: P.not(P.nullish), len: P.when((l) => l > 0) }, ({ activeId }) => {
+          if (!store.get(activeId)) {
+            const next = sessions.value[Math.min(sessions.value.length - 1, len - 1)];
+            attachSession(next.id);
+            activeSessionId.value = next.id;
+          }
+        })
+        .otherwise(() => {});
     },
   );
 
