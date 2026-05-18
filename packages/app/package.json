@@ -1,0 +1,30 @@
+{
+  "name": "@tum/app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "cd ../../crates/tauri && tauri",
+    "tauri:dev": "cd ../../crates/tauri && tauri dev",
+    "tauri:build": "cd ../../crates/tauri && tauri build"
+  },
+  "dependencies": {
+    "vue": "catalog:",
+    "@tum/terminal": "workspace:*",
+    "@tum/core": "workspace:*",
+    "@tum/session": "workspace:*",
+    "@tauri-apps/api": "catalog:"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

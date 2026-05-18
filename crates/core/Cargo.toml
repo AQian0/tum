@@ -1,0 +1,10 @@
+[package]
+name = "tum-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pty = { workspace = true }
+log = { workspace = true }
+tum-ipc = { workspace = true }
+tum-session = { workspace = true }

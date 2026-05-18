@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/tauri", "crates/core", "crates/pty", "crates/ipc", "crates/events", "crates/session"]
+
+[workspace.dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.1", features = [] }
+tauri-plugin-log = "2"
+tauri-build = { version = "2.6.1", features = [] }
+pty = { path = "crates/pty" }
+tum-core = { path = "crates/core" }
+tum-ipc = { path = "crates/ipc" }
+tum-events = { path = "crates/events" }
+tum-session = { path = "crates/session" }

@@ -1,0 +1,9 @@
+[package]
+name = "tum-ipc"
+version = "0.1.0"
+edition = "2021"
+description = "Communication protocol types and transport abstraction for tum"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,11 @@
+[package]
+name = "tum-session"
+version = "0.1.0"
+edition = "2021"
+description = "Multi-session terminal manager for tum"
+
+[dependencies]
+pty = { workspace = true }
+tum-ipc = { workspace = true }
+serde = { workspace = true }
+log = { workspace = true }
