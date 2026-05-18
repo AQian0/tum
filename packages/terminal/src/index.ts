@@ -113,8 +113,9 @@ export class TumTerminal {
     this.xterm.onData((data) => this.handleInput(data));
     this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols));
 
-    // Window resize → re-fit the terminal
+    // Window resize → re-fit the terminal (skip if detached)
     this.resizeHandler = () => {
+      if (!this.xterm.element?.isConnected) return;
       this.fitAddon.fit();
       this.fillToEdge();
     };
@@ -158,6 +159,39 @@ export class TumTerminal {
   /** The underlying xterm.js Terminal (for advanced API access). */
   get terminal(): Terminal {
     return this.xterm;
+  }
+
+  /** The root DOM element of this terminal. */
+  get element(): HTMLElement | undefined {
+    return this.xterm.element;
+  }
+
+  /**
+   * Detach the terminal element from its current DOM parent without
+   * disposing the terminal instance.  The terminal keeps running and
+   * continues receiving PTY output (the buffer stays up to date).
+   *
+   * Use {@link attach} to re-mount it into a visible container later.
+   */
+  detach(): void {
+    const el = this.xterm.element;
+    if (el && el.parentElement) {
+      el.parentElement.removeChild(el);
+    }
+  }
+
+  /**
+   * Re-attach a previously detached terminal into a new parent element.
+   * Automatically re-fits the terminal to fill the container.
+   */
+  attach(parent: HTMLElement): void {
+    const el = this.xterm.element;
+    if (!el) return;
+    parent.appendChild(el);
+    requestAnimationFrame(() => {
+      this.fitAddon.fit();
+      this.fillToEdge();
+    });
   }
 
   // -- private --
