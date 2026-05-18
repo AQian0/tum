@@ -7,5 +7,8 @@ description = "Multi-session terminal manager for tum"
 [dependencies]
 pty = { workspace = true }
 tum-ipc = { workspace = true }
+tum-events = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
 log = { workspace = true }

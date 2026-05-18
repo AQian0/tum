@@ -1,84 +1,38 @@
-//! Backend core: convenience layer over the session manager.
+//! Core integration layer for the tum terminal application.
 //!
-//! For multi-session / multi-tab use, prefer [`tum_session::SessionManager`]
-//! directly.  [`TerminalManager`] is retained for single-session workflows
-//! where managing session ids manually is unnecessary.
-//!
-//! # Relationship to `tum-session`
-//!
-//! `tum-session` is the canonical session-management crate.  `tum-core`
-//! wraps it with a simplified single-session API.  Downstream crates
-//! that need multi-tab support should use `tum-session` directly;
-//! those that only need one terminal can stay with `TerminalManager`.
+//! Wires together the event bus, session manager, and Tauri command
+//! handlers into a single application state that can be registered as
+//! Tauri managed state.
 
-use pty::Error as PtyError;
-use std::sync::{Arc, Mutex};
-use tum_ipc::TerminalTransport;
-use tum_session::SessionManager;
+use tum_events::{shared_event_bus, SharedEventBus};
+use tum_session::SharedSessionManager;
 
-pub use pty::PtyOptions;
-pub use tum_session::SessionId;
-
-/// Manages the lifecycle of a **single** terminal session.
-///
-/// Internally delegates to [`SessionManager`] but only ever holds one
-/// session.  This is the simplest integration path for downstream
-/// crates that don't need multi-tab support yet.
-///
-/// # Thread safety
-///
-/// All methods take `&self` and use internal synchronisation.
-pub struct TerminalManager {
-    manager: SessionManager,
-    session_id: Mutex<Option<SessionId>>,
-    transport: Mutex<Option<Arc<dyn TerminalTransport>>>,
+/// Application state shared across all Tauri command handlers.
+pub struct AppState {
+    pub event_bus: SharedEventBus,
+    pub sessions: SharedSessionManager,
 }
 
-impl TerminalManager {
+impl AppState {
+    /// Create the application state, wiring the event bus and session
+    /// manager together.
     pub fn new() -> Self {
+        let event_bus = shared_event_bus();
+        let sessions = SessionManager::new(event_bus.clone());
+
         Self {
-            manager: SessionManager::new(),
-            session_id: Mutex::new(None),
-            transport: Mutex::new(None),
+            event_bus,
+            sessions: std::sync::Arc::new(sessions),
         }
-    }
-
-    /// If a session is already active it is **replaced** (the old PTY
-    /// is dropped and its child process killed).
-    pub fn spawn(
-        &self,
-        options: PtyOptions,
-        transport: Arc<dyn TerminalTransport>,
-    ) -> Result<(), PtyError> {
-        if let Some(old_id) = *self.session_id.lock().unwrap() {
-            self.manager.close(old_id);
-        }
-
-        let id = self.manager.spawn(options, Arc::clone(&transport))?;
-        *self.session_id.lock().unwrap() = Some(id);
-        *self.transport.lock().unwrap() = Some(transport);
-        Ok(())
-    }
-
-    /// No-op if no session is active.
-    pub fn write(&self, data: &[u8]) -> Result<(), PtyError> {
-        if let Some(id) = *self.session_id.lock().unwrap() {
-            self.manager.write(id, data)?;
-        }
-        Ok(())
-    }
-
-    /// No-op if no session is active or dimensions are zero.
-    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), PtyError> {
-        if let Some(id) = *self.session_id.lock().unwrap() {
-            self.manager.resize(id, cols, rows)?;
-        }
-        Ok(())
     }
 }
 
-impl Default for TerminalManager {
+impl Default for AppState {
     fn default() -> Self {
         Self::new()
     }
 }
+
+/// Re-export commonly needed types for downstream crates.
+pub use tum_events::EventBus;
+pub use tum_session::SessionManager;

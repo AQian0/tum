@@ -10,6 +10,7 @@
   "dependencies": {
     "@tum/core": "workspace:*",
     "@tum/terminal": "workspace:*",
+    "@tauri-apps/api": "catalog:",
     "vue": "catalog:"
   }
 }

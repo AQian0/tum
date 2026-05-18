@@ -7,4 +7,5 @@ edition = "2021"
 pty = { workspace = true }
 log = { workspace = true }
 tum-ipc = { workspace = true }
+tum-events = { workspace = true }
 tum-session = { workspace = true }

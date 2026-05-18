@@ -1,73 +1,108 @@
-//! Communication protocol between the terminal backend and frontend.
+//! IPC types and serialization for tum.
 //!
-//! This crate defines the message types that flow in both directions
-//! and a transport trait that abstracts over how these messages are
-//! delivered (Tauri events, WebSocket, stdio, etc.).
-//!
-//! # Multi-session
-//!
-//! Every command and event carries a `session_id` so the frontend can
-//! maintain independent tabs, each backed by its own terminal session.
+//! Defines the full protocol between the Tauri frontend and the Rust backend,
+//! including session lifecycle commands, PTY I/O, and event payloads.
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ClientCommand {
-    Spawn {
-        #[serde(default = "default_cols")]
-        cols: u16,
-        #[serde(default = "default_rows")]
-        rows: u16,
-        shell: Option<String>,
-        cwd: Option<String>,
-    },
-    Write {
-        session_id: u64,
-        data: String,
-    },
-    Resize {
-        session_id: u64,
-        cols: u16,
-        rows: u16,
-    },
-    Close {
-        session_id: u64,
-    },
+// ---------------------------------------------------------------------------
+// Session commands (frontend → backend)
+// ---------------------------------------------------------------------------
+
+/// Create a new terminal session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSessionRequest {
+    /// Optional human-readable name (e.g. "project-x").
+    pub name: Option<String>,
+    /// Working directory for the initial shell.
+    pub cwd: Option<String>,
+    /// Shell command to run (defaults to the user's shell).
+    pub command: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ServerEvent {
-    Spawned {
-        session_id: u64,
-    },
-    Output {
-        session_id: u64,
-        data: String,
-    },
-    Exit {
-        session_id: u64,
-        code: i32,
-    },
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSessionResponse {
+    pub session_id: String,
+    /// The ID of the initial PTY created with this session.
+    pub pty_id: String,
 }
 
-/// Abstraction over how [`ServerEvent`]s are delivered to the frontend.
-///
-/// Implementors are responsible for serialising and sending the event
-/// over their chosen channel (Tauri event system, WebSocket, etc.).
-///
-/// # Thread safety
-///
-/// `send_event` may be called from any thread (e.g. the PTY reader
-/// thread), so implementors must be `Send + Sync`.
-pub trait TerminalTransport: Send + Sync {
-    fn send_event(&self, event: ServerEvent);
+/// Attach a new PTY (pane) to an existing session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachPtyRequest {
+    pub session_id: String,
+    pub cwd: Option<String>,
 }
 
-const fn default_cols() -> u16 {
-    80
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachPtyResponse {
+    pub pty_id: String,
 }
-const fn default_rows() -> u16 {
-    24
+
+/// Write input to a PTY.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyInputRequest {
+    pub session_id: String,
+    pub pty_id: String,
+    /// Raw bytes to write to the PTY.
+    pub data: Vec<u8>,
+}
+
+/// Resize a PTY.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyResizeRequest {
+    pub session_id: String,
+    pub pty_id: String,
+    pub rows: u16,
+    pub cols: u16,
+}
+
+/// Destroy / close a session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DestroySessionRequest {
+    pub session_id: String,
+}
+
+// ---------------------------------------------------------------------------
+// Session commands (backend → frontend events)
+// ---------------------------------------------------------------------------
+
+/// The backend pushes PTY output to the frontend via this event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyOutputEvent {
+    pub session_id: String,
+    pub pty_id: String,
+    pub data: Vec<u8>,
+}
+
+/// A PTY has exited (shell process terminated).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyExitEvent {
+    pub session_id: String,
+    pub pty_id: String,
+    pub exit_code: i32,
+}
+
+/// A session was destroyed (all PTYs closed).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDestroyedEvent {
+    pub session_id: String,
+}
+
+// ---------------------------------------------------------------------------
+// Session list / query
+// ---------------------------------------------------------------------------
+
+/// Summary of a single session returned in list queries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: String,
+    pub name: Option<String>,
+    pub cwd: Option<String>,
+    pub pty_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListSessionsResponse {
+    pub sessions: Vec<SessionInfo>,
 }

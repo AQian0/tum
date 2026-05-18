@@ -39,6 +39,7 @@
       "name": "@tum/session",
       "version": "0.1.0",
       "dependencies": {
+        "@tauri-apps/api": "catalog:",
         "@tum/core": "workspace:*",
         "@tum/terminal": "workspace:*",
         "vue": "catalog:",
@@ -48,6 +49,7 @@
       "name": "@tum/terminal",
       "version": "0.1.0",
       "dependencies": {
+        "@tum/core": "workspace:*",
         "@xterm/addon-fit": "catalog:",
         "@xterm/addon-web-links": "catalog:",
         "@xterm/addon-webgl": "catalog:",

@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@tum/core": "workspace:*",
     "@xterm/xterm": "catalog:",
     "@xterm/addon-fit": "catalog:",
     "@xterm/addon-webgl": "catalog:",
