@@ -29,6 +29,11 @@
     overflow: hidden;
     background-color: var(--color-app-bg);
   }
+
+  .xterm,
+  .xterm-viewport {
+    background-color: var(--color-app-bg) !important;
+  }
 }
 
 /*

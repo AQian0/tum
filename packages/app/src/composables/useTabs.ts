@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from "vue";
+import { shallowRef, watch, type Ref } from "vue";
 import { getSessionStore } from "@tum/session";
 import type { SessionEntry } from "@tum/session";
 
@@ -14,7 +14,7 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
   const store = getSessionStore();
   const sessions = store.sessions as Ref<SessionEntry[]>;
 
-  const activeSessionId = ref<string | null>(null);
+  const activeSessionId = shallowRef<string | null>(null);
 
   let tabCounter = 0;
 
@@ -24,19 +24,19 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
     return session?.tabs[0]?.terminal ?? null;
   }
 
-  function detachCurrent() {
-    const term = activeTerminal();
-    if (term) term.detach();
+  function detachCurrent(): void {
+    activeTerminal()?.detach();
   }
 
-  function attachSession(sessionId: string) {
+  function attachSession(sessionId: string): void {
     const session = store.get(sessionId);
     const term = session?.tabs[0]?.terminal;
     const parent = viewportRef.value;
-    if (term && parent) {
-      term.attach(parent);
-      term.focus();
-    }
+
+    if (!term || !parent) return;
+
+    term.attach(parent);
+    term.focus();
   }
 
   async function addTab(name?: string): Promise<void> {
