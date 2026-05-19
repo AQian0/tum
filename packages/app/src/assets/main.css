@@ -15,10 +15,6 @@
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
 }
 
-/*
- * Base layer: global resets and element defaults that Tailwind's preflight
- * doesn't cover.
- */
 @layer base {
   :root {
     color-scheme: light dark;
@@ -36,9 +32,6 @@
   }
 }
 
-/*
- * Utility for hiding scrollbars while keeping scroll functionality.
- */
 @utility scrollbar-none {
   scrollbar-width: none;
   &::-webkit-scrollbar {

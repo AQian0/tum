@@ -1,5 +1,3 @@
-//! A single terminal session containing one or more PTYs.
-
 use pty::{spawn_pty, PtyProcess};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -7,30 +5,21 @@ use tum_events::SharedEventBus;
 use tum_ipc::ServerEvent;
 use uuid::Uuid;
 
-/// A handle to a single PTY within a session.
 pub struct PtyHandle {
     pub id: String,
     process: Mutex<PtyProcess>,
 }
 
-/// A terminal session that may contain multiple PTY panes.
-///
-/// Each PTY runs in its own reader thread.  Output is forwarded to the
-/// frontend via the shared event bus.  When the last PTY exits, the
-/// session manager receives a `session:all_pty_exited` event and performs
-/// cleanup (see [`crate::SessionManager::new`]).
 pub struct Session {
     id: String,
     name: Option<String>,
     cwd: Option<String>,
     ptys: Mutex<Vec<PtyHandle>>,
     event_bus: SharedEventBus,
-    /// Number of PTY reader threads still running.
     alive_count: Arc<AtomicUsize>,
 }
 
 impl Session {
-    /// Create a new session with one initial PTY.
     pub(crate) fn new(
         event_bus: SharedEventBus,
         name: Option<String>,
@@ -52,7 +41,6 @@ impl Session {
         }
     }
 
-    /// Attach an additional PTY to this session.
     pub(crate) fn attach_pty(&self, shell: &str, cwd: Option<&str>) -> String {
         self.alive_count.fetch_add(1, Ordering::SeqCst);
         let pty = Self::spawn_pty_inner(&self.id, &self.event_bus, &self.alive_count, shell, cwd);
@@ -61,7 +49,6 @@ impl Session {
         id
     }
 
-    /// Write bytes to a specific PTY.
     pub(crate) fn write_pty(&self, pty_id: &str, data: &[u8]) -> Result<(), String> {
         let guard = self.ptys.lock().unwrap();
         let pty = guard
@@ -73,7 +60,6 @@ impl Session {
         proc.write(data).map_err(|e| e.to_string())
     }
 
-    /// Resize a specific PTY.
     pub(crate) fn resize_pty(&self, pty_id: &str, rows: u16, cols: u16) -> Result<(), String> {
         if rows == 0 || cols == 0 {
             return Ok(());
@@ -104,17 +90,11 @@ impl Session {
         self.ptys.lock().unwrap().len()
     }
 
-    /// Return the ID of the first PTY, or an empty string if none exist.
     pub fn first_pty_id(&self) -> String {
         let guard = self.ptys.lock().unwrap();
         guard.first().map(|p| p.id.clone()).unwrap_or_default()
     }
 
-    /// Destroy a specific PTY, removing it from the session.
-    ///
-    /// The PTY process is killed and its reader thread will exit,
-    /// triggering the normal `pty:exit` → `session:all_pty_exited` cleanup
-    /// chain if this was the last PTY.
     pub fn destroy_pty(&self, pty_id: &str) -> Result<(), String> {
         let mut guard = self.ptys.lock().unwrap();
         let idx = guard
@@ -122,8 +102,6 @@ impl Session {
             .position(|p| p.id == pty_id)
             .ok_or_else(|| format!("PTY not found: {pty_id}"))?;
 
-        // Kill the process — this will cause the reader thread to exit
-        // and emit pty:exit.
         let pty = guard.remove(idx);
         let mut proc = pty.process.lock().unwrap();
         proc.kill().map_err(|e| e.to_string())?;
@@ -132,8 +110,6 @@ impl Session {
         Ok(())
     }
 
-    /// Spawn a single PTY, wire up its reader thread to the event bus,
-    /// and return a [`PtyHandle`].
     fn spawn_pty_inner(
         session_id: &str,
         event_bus: &SharedEventBus,
@@ -151,13 +127,11 @@ impl Session {
         let bus = event_bus.clone();
         let count = Arc::clone(alive_count);
 
-        // Take the reader out of PtyProcess for the reader thread.
         let reader = std::mem::replace(&mut pty.reader, {
             let (_tx, rx) = std::sync::mpsc::channel();
             rx
         });
 
-        // The reader thread drains PTY output and pushes events to the bus.
         std::thread::spawn(move || {
             loop {
                 match reader.recv() {
@@ -170,7 +144,7 @@ impl Session {
                             bus.emit("pty:output", &json);
                         }
                     }
-                    Err(_) => break, // channel closed → PTY exited
+                    Err(_) => break,
                 }
             }
 
@@ -182,8 +156,6 @@ impl Session {
                 bus.emit("pty:exit", &json);
             }
 
-            // Decrement alive count; when it reaches zero the
-            // SessionManager's subscriber handles cleanup.
             if count.fetch_sub(1, Ordering::SeqCst) == 1 {
                 bus.emit("session:all_pty_exited", &sid);
             }

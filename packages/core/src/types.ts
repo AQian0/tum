@@ -1,10 +1,3 @@
-// Unified IPC protocol types that mirror the Rust enums from `tum-ipc`.
-//
-// All messages use a discriminated union with a `kind` discriminator and
-// a `data` payload matching `#[serde(tag = "kind", content = "data")]`.
-
-// ── Client → Server ────────────────────────────────────────────────
-
 export type ClientMessage =
   | { kind: "create_session"; data: CreateSessionData }
   | { kind: "attach_pty"; data: AttachPtyData }
@@ -47,8 +40,6 @@ export interface DestroySessionData {
   session_id: string;
 }
 
-// ── Server → Client (synchronous response) ─────────────────────────
-
 export type ServerMessage =
   | { kind: "session_created"; data: SessionCreatedData }
   | { kind: "pty_attached"; data: PtyAttachedData }
@@ -67,8 +58,6 @@ export interface PtyAttachedData {
 export interface SessionsListedData {
   sessions: SessionInfo[];
 }
-
-// ── Server → Client (asynchronous push event) ──────────────────────
 
 export type ServerEvent =
   | { kind: "pty_output"; data: PtyOutputData }
@@ -90,8 +79,6 @@ export interface PtyExitData {
 export interface SessionDestroyedData {
   session_id: string;
 }
-
-// ── Shared ─────────────────────────────────────────────────────────
 
 export interface SessionInfo {
   id: string;

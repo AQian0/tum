@@ -30,35 +30,19 @@ const DEFAULT_THEME = {
 };
 
 export interface TerminalOptions {
-  /** The DOM element to mount the terminal into. */
   parent: HTMLElement;
-  /** Session and PTY IDs for routing I/O to the correct backend PTY. */
   sessionId: string;
   ptyId: string;
-  /**
-   * Called when the user types into the terminal.
-   * The callback receives the raw string data (before encoding).
-   */
   onInput: (data: string) => void;
-  /**
-   * Called when the terminal is resized (by FitAddon or programmatically).
-   * The callback receives the new rows and cols.
-   */
   onResize: (rows: number, cols: number) => void;
-  /** Optional welcome message written on mount. */
   welcomeMessage?: string;
-  /** Font size in pixels (default 14). */
   fontSize?: number;
-  /** Font family (defaults to monospace stack). */
   fontFamily?: string;
-  /** Partial theme overrides merged on top of DEFAULT_THEME. */
   theme?: Partial<typeof DEFAULT_THEME>;
-  /** Initial dimensions (default 80×24). */
   rows?: number;
   cols?: number;
 }
 
-/** Payload delivered to {@link TumTerminal.writeOutput}. */
 export interface PtyOutputPayload {
   session_id: string;
   pty_id: string;
@@ -111,7 +95,6 @@ export class TumTerminal {
     this.xterm.onData((data) => this.handleInput(data, opts));
     this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols, opts));
 
-    // Window resize → re-fit the terminal (skip if detached)
     this.resizeHandler = () => {
       if (!this.xterm.element?.isConnected) return;
       this.fitAddon.fit();
@@ -120,24 +103,20 @@ export class TumTerminal {
     window.addEventListener("resize", this.resizeHandler);
   }
 
-  /** Write PTY output to the terminal display. */
   writeOutput(payload: PtyOutputPayload): void {
     if (payload.session_id === this.sessionId && payload.pty_id === this.ptyId) {
       this.xterm.write(new Uint8Array(payload.data));
     }
   }
 
-  /** Write a line of text followed by CR/LF. */
   writeln(data: string): void {
     this.xterm.writeln(data);
   }
 
-  /** Write raw text (no automatic line break). */
   write(data: string): void {
     this.xterm.write(data);
   }
 
-  /** Resize to fill the container + fillToEdge. */
   fit(): void {
     this.fitAddon.fit();
     this.fillToEdge();
@@ -152,23 +131,14 @@ export class TumTerminal {
     this.xterm.dispose();
   }
 
-  /** The underlying xterm.js Terminal (for advanced API access). */
   get terminal(): Terminal {
     return this.xterm;
   }
 
-  /** The root DOM element of this terminal. */
   get element(): HTMLElement | undefined {
     return this.xterm.element;
   }
 
-  /**
-   * Detach the terminal element from its current DOM parent without
-   * disposing the terminal instance.  The terminal keeps running and
-   * continues receiving PTY output (the buffer stays up to date).
-   *
-   * Use {@link attach} to re-mount it into a visible container later.
-   */
   detach(): void {
     const el = this.xterm.element;
     if (el && el.parentElement) {
@@ -176,10 +146,6 @@ export class TumTerminal {
     }
   }
 
-  /**
-   * Re-attach a previously detached terminal into a new parent element.
-   * Automatically re-fits the terminal to fill the container.
-   */
   attach(parent: HTMLElement): void {
     const el = this.xterm.element;
     if (!el) return;

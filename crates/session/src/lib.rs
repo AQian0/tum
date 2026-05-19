@@ -1,7 +1,7 @@
 //! Multi-session terminal manager.
 //!
-//! A [`SessionManager`] owns all active terminal sessions.  Each session
-//! can contain multiple PTYs (panes/tabs), each identified by a unique ID.
+//! A [`SessionManager`] owns all active terminal sessions. Each session can
+//! contain multiple PTYs, each identified by a unique ID.
 //!
 //! # Architecture
 //!
@@ -13,9 +13,6 @@
 //!  └── Session "def456"
 //!      └── Pty "pty-0"  →  /bin/bash
 //! ```
-//!
-//! The manager pushes events (output, exit, destroyed) to the frontend
-//! through the [`tum_events::EventBus`] as [`tum_ipc::ServerEvent`] values.
 
 mod session;
 
@@ -26,7 +23,6 @@ use std::sync::{Arc, Mutex};
 use tum_events::SharedEventBus;
 use tum_ipc::*;
 
-/// The default shell to use when none is specified by the frontend.
 fn default_shell() -> String {
     #[cfg(unix)]
     {
@@ -40,27 +36,15 @@ fn default_shell() -> String {
 
 type SessionMap = Arc<Mutex<HashMap<String, Session>>>;
 
-/// Central manager for all terminal sessions.
-///
-/// # Thread safety
-///
-/// The manager uses internal `Mutex` synchronisation; it can be shared
-/// freely via `Arc` across threads.
 pub struct SessionManager {
     sessions: SessionMap,
     event_bus: SharedEventBus,
 }
 
 impl SessionManager {
-    /// Create a new session manager backed by the given event bus.
-    ///
-    /// Subscribes to internal cleanup events so that sessions are
-    /// automatically removed when all their PTYs exit.
     pub fn new(event_bus: SharedEventBus) -> Self {
         let sessions: SessionMap = Arc::new(Mutex::new(HashMap::new()));
 
-        // When a session's last PTY exits, remove it from the map and
-        // emit a user-facing "session:destroyed" event.
         {
             let sessions = Arc::clone(&sessions);
             let bus = event_bus.clone();
@@ -84,27 +68,22 @@ impl SessionManager {
         }
     }
 
-    // ── Message dispatch ────────────────────────────────────────────
-
-    /// Process an incoming [`ClientMessage`] and return the appropriate
-    /// [`ServerMessage`] response.
-    ///
-    /// This is the single entry point for all frontend requests.
     pub fn handle_message(&self, msg: ClientMessage) -> Result<ServerMessage, String> {
         match msg {
             ClientMessage::CreateSession { name, cwd, command } => {
                 let shell = command.unwrap_or_else(default_shell);
-                let session = Session::new(self.event_bus.clone(), name.clone(), cwd.clone(), &shell);
+                let session =
+                    Session::new(self.event_bus.clone(), name.clone(), cwd.clone(), &shell);
 
                 let session_id = session.id().to_owned();
                 let pty_id = session.first_pty_id();
-                self.sessions.lock().unwrap().insert(session_id.clone(), session);
+                self.sessions
+                    .lock()
+                    .unwrap()
+                    .insert(session_id.clone(), session);
 
                 log::info!("Session created: {session_id}");
-                Ok(ServerMessage::SessionCreated {
-                    session_id,
-                    pty_id,
-                })
+                Ok(ServerMessage::SessionCreated { session_id, pty_id })
             }
 
             ClientMessage::AttachPty { session_id, cwd } => {
@@ -147,10 +126,7 @@ impl SessionManager {
                 Ok(ServerMessage::Ack)
             }
 
-            ClientMessage::DestroyPty {
-                session_id,
-                pty_id,
-            } => {
+            ClientMessage::DestroyPty { session_id, pty_id } => {
                 let mut guard = self.sessions.lock().unwrap();
                 let session = guard
                     .get_mut(&session_id)
@@ -167,12 +143,9 @@ impl SessionManager {
                     .ok_or_else(|| format!("session not found: {session_id}"))?;
                 log::info!("Session destroyed: {session_id}");
 
-                // Broadcast so the frontend can clean up its local state.
-                if let Ok(json) =
-                    serde_json::to_string(&ServerEvent::SessionDestroyed {
-                        session_id: session_id.clone(),
-                    })
-                {
+                if let Ok(json) = serde_json::to_string(&ServerEvent::SessionDestroyed {
+                    session_id: session_id.clone(),
+                }) {
                     self.event_bus.emit("session:destroyed", &json);
                 }
 
@@ -196,5 +169,4 @@ impl SessionManager {
     }
 }
 
-/// Convenience wrapper: `Arc<SessionManager>`.
 pub type SharedSessionManager = Arc<SessionManager>;
