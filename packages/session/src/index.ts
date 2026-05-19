@@ -81,9 +81,11 @@ export const useSessionStore = () => {
    * Returns the `SessionEntry` and the initial PTY ID so the caller can
    * mount a terminal widget.
    */
-  const create = async (
-    opts: { name?: string; cwd?: string; command?: string },
-  ): Promise<{ session: SessionEntry; ptyId: string }> => {
+  const create = async (opts: {
+    name?: string;
+    cwd?: string;
+    command?: string;
+  }): Promise<{ session: SessionEntry; ptyId: string }> => {
     await ensureListeners();
 
     const resp = await send({
@@ -187,7 +189,7 @@ export const useSessionStore = () => {
     destroy,
     get,
   };
-}
+};
 
 let _globalStore: ReturnType<typeof useSessionStore> | null = null;
 

@@ -22,11 +22,9 @@ const baseTabClass = [
 const activeTabClass =
   "bg-surface-hover text-text-active after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-accent after:content-['']";
 
-const isActiveTab = (sessionId: string): boolean =>
-  sessionId === props.activeSessionId;
+const isActiveTab = (sessionId: string): boolean => sessionId === props.activeSessionId;
 
-const tabLabel = (session: SessionEntry): string =>
-  session.name ?? session.id.slice(0, 8);
+const tabLabel = (session: SessionEntry): string => session.name ?? session.id.slice(0, 8);
 </script>
 
 <template>

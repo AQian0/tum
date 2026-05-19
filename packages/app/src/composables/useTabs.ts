@@ -109,4 +109,4 @@ export const useTabs = (viewportRef: Ref<HTMLElement | null>) => {
     switchTab,
     closeTab,
   };
-}
+};
