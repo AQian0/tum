@@ -147,6 +147,19 @@ impl SessionManager {
                 Ok(ServerMessage::Ack)
             }
 
+            ClientMessage::DestroyPty {
+                session_id,
+                pty_id,
+            } => {
+                let mut guard = self.sessions.lock().unwrap();
+                let session = guard
+                    .get_mut(&session_id)
+                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                session.destroy_pty(&pty_id)?;
+                log::info!("PTY {pty_id} destroyed in session {session_id}");
+                Ok(ServerMessage::Ack)
+            }
+
             ClientMessage::DestroySession { session_id } => {
                 let mut guard = self.sessions.lock().unwrap();
                 guard

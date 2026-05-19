@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import type { SessionEntry } from "@tum/core";
+import type { SessionTab } from "@tum/core";
 
 const props = defineProps<{
-  sessions: readonly SessionEntry[];
-  activeSessionId: string | null;
+  tabs: readonly SessionTab[];
+  activeTabId: string | null;
 }>();
 
 const emit = defineEmits<{
-  switch: [sessionId: string];
-  close: [sessionId: string];
+  switch: [ptyId: string];
+  close: [ptyId: string];
   add: [];
 }>();
 
@@ -22,9 +22,9 @@ const baseTabClass = [
 const activeTabClass =
   "bg-surface-hover text-text-active after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-accent after:content-['']";
 
-const isActiveTab = (sessionId: string): boolean => sessionId === props.activeSessionId;
+const isActiveTab = (ptyId: string): boolean => ptyId === props.activeTabId;
 
-const tabLabel = (session: SessionEntry): string => session.name ?? session.id.slice(0, 8);
+const tabLabel = (tab: SessionTab): string => tab.name;
 </script>
 
 <template>
@@ -33,16 +33,16 @@ const tabLabel = (session: SessionEntry): string => session.name ?? session.id.s
   >
     <div class="flex flex-1 overflow-x-auto scrollbar-none">
       <button
-        v-for="s in sessions"
-        :key="s.id"
-        :class="[baseTabClass, isActiveTab(s.id) ? activeTabClass : '']"
-        @click="emit('switch', s.id)"
+        v-for="tab in tabs"
+        :key="tab.ptyId"
+        :class="[baseTabClass, isActiveTab(tab.ptyId) ? activeTabClass : '']"
+        @click="emit('switch', tab.ptyId)"
       >
-        <span class="overflow-hidden text-ellipsis">{{ tabLabel(s) }}</span>
+        <span class="overflow-hidden text-ellipsis">{{ tabLabel(tab) }}</span>
         <span
           class="flex items-center justify-center w-4 h-4 rounded-sm text-[11px] leading-none opacity-0 transition group-hover:opacity-60 hover:opacity-100 hover:text-danger"
-          :class="{ 'opacity-60': isActiveTab(s.id) }"
-          @click.stop="emit('close', s.id)"
+          :class="{ 'opacity-60': isActiveTab(tab.ptyId) }"
+          @click.stop="emit('close', tab.ptyId)"
           title="Close tab"
           >&#x2715;</span
         >

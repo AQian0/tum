@@ -3,13 +3,14 @@ import { match } from "ts-pattern";
 import type { ClientMessage, ServerMessage, ServerEvent } from "@tum/core";
 import { TumTerminal, type TerminalOptions } from "@tum/terminal";
 
-/** A single terminal tab/pane within a session, backed by a TumTerminal. */
+/** A single terminal tab within a session, backed by a TumTerminal. */
 export interface SessionTab {
   ptyId: string;
+  name: string;
   terminal: TumTerminal;
 }
 
-/** A named session containing one or more terminal tabs. */
+/** A named session (workspace) containing one or more terminal tabs. */
 export interface SessionEntry {
   id: string;
   name: string | null;
@@ -17,33 +18,36 @@ export interface SessionEntry {
 }
 
 /**
- * Transport abstraction injected by the integration layer (`@tum/core`).
+ * Transport abstraction injected by the integration layer.
  *
  * `@tum/session` does not import any runtime code from `@tum/core`;
  * it only uses its types and receives the actual IPC functions at
- * store-creation time.  This keeps `session` decoupled from the
- * communication backend while staying fully typed.
+ * store-creation time.
  */
 export interface SessionTransport {
-  /** Send a message to the backend and wait for a synchronous response. */
   send(message: ClientMessage): Promise<ServerMessage>;
-  /**
-   * Subscribe to push events from the backend.
-   * Returns an unsubscribe function.
-   */
   subscribe(handler: (event: ServerEvent) => void): () => void;
 }
 
 /**
  * Reactive session store for the tum terminal application.
  *
+ * A **session** is a workspace that contains one or more **tabs**
+ * (each backed by a PTY).  The store manages the full lifecycle:
+ * creating/destroying sessions and attaching/destroying PTYs within
+ * them.
+ *
  * Usage:
  * ```ts
  * const store = useSessionStore(transport);
- * const session = await store.create({ name: "my-project" });
- * // Mount the initial PTY terminal into the DOM:
- * const term = store.mountTab(session.id, containerEl);
- * term.focus();
+ *
+ * // Create a workspace with an initial tab:
+ * const { session, ptyId } = await store.createSession({ name: "my-project" });
+ * store.mountTerminal(session.id, ptyId, "bash", containerEl);
+ *
+ * // Add another tab to the same workspace:
+ * const tab2ptyId = await store.attachPty(session.id);
+ * store.mountTerminal(session.id, tab2ptyId, "zsh", containerEl);
  * ```
  */
 export const useSessionStore = (transport: SessionTransport) => {
@@ -70,6 +74,8 @@ export const useSessionStore = (transport: SessionTransport) => {
           }
         })
         .with({ kind: "pty_exit" }, ({ data: { session_id, pty_id } }) => {
+          // A PTY exited (either on its own or because we killed it).
+          // Remove the tab from the session.
           const session = sessions.value.find((s) => s.id === session_id);
           if (!session) return;
 
@@ -92,13 +98,15 @@ export const useSessionStore = (transport: SessionTransport) => {
     });
   };
 
+  // ── Session-level operations ───────────────────────────────────
+
   /**
-   * Create a new session with one PTY tab.
+   * Create a new session (workspace) with one initial PTY tab.
    *
-   * Returns the `SessionEntry` and the initial PTY ID so the caller can
-   * mount a terminal widget.
+   * Returns the `SessionEntry` and the ID of the initial PTY so the
+   * caller can mount a terminal widget via {@link mountTerminal}.
    */
-  const create = async (opts: {
+  const createSession = async (opts: {
     name?: string;
     cwd?: string;
     command?: string;
@@ -126,15 +134,89 @@ export const useSessionStore = (transport: SessionTransport) => {
   };
 
   /**
-   * Create a terminal widget for a specific PTY and mount it into the DOM.
+   * Destroy a session and all its tabs.
+   *
+   * Eagerly cleans up local state so the UI responds immediately.
+   */
+  const destroySession = async (sessionId: string): Promise<void> => {
+    await transport.send({
+      kind: "destroy_session",
+      data: { session_id: sessionId },
+    });
+
+    const idx = sessions.value.findIndex((s) => s.id === sessionId);
+    if (idx !== -1) {
+      for (const tab of sessions.value[idx].tabs) {
+        tab.terminal.dispose();
+      }
+      sessions.value.splice(idx, 1);
+    }
+  };
+
+  /** Find a session by ID. */
+  const get = (sessionId: string): SessionEntry | undefined =>
+    sessions.value.find((s) => s.id === sessionId);
+
+  /** All active sessions (reactive, read-only). */
+  const list = (): Readonly<Ref<SessionEntry[]>> => sessions;
+
+  // ── Tab-level operations (within a session) ────────────────────
+
+  /**
+   * Attach a new PTY to an existing session (backend call only).
+   *
+   * Returns the new PTY ID.  Follow up with {@link mountTerminal} to
+   * create the visible terminal widget.
+   */
+  const attachPty = async (sessionId: string, cwd?: string): Promise<string> => {
+    const resp = await transport.send({
+      kind: "attach_pty",
+      data: { session_id: sessionId, cwd },
+    });
+
+    return match(resp)
+      .with({ kind: "pty_attached" }, ({ data: { pty_id } }) => pty_id)
+      .otherwise((other) => {
+        throw new Error(`Unexpected response: ${other.kind}`);
+      });
+  };
+
+  /**
+   * Destroy a single PTY within a session.
+   *
+   * Eagerly removes the tab from local state and disposes the terminal
+   * widget so the UI reacts immediately.  The backend kill triggers a
+   * `pty_exit` event, which is a no-op if the tab is already removed.
+   */
+  const destroyPty = async (sessionId: string, ptyId: string): Promise<void> => {
+    // Eager cleanup first, then tell the backend.
+    const session = sessions.value.find((s) => s.id === sessionId);
+    if (session) {
+      const idx = session.tabs.findIndex((t) => t.ptyId === ptyId);
+      if (idx !== -1) {
+        session.tabs[idx].terminal.dispose();
+        session.tabs.splice(idx, 1);
+      }
+    }
+
+    await transport.send({
+      kind: "destroy_pty",
+      data: { session_id: sessionId, pty_id: ptyId },
+    });
+  };
+
+  /**
+   * Create a terminal widget for a PTY and mount it into the DOM.
    *
    * `ptyId` must be a real PTY ID returned by the backend (from
-   * `create()` or `attachTab()`).  Extra options (welcomeMessage,
-   * fontSize, theme, etc.) are forwarded to `TumTerminal`.
+   * {@link createSession} or {@link attachPty}).
+   *
+   * @param tabName - Human-readable label shown in the tab bar.
    */
-  const mountTab = (
+  const mountTerminal = (
     sessionId: string,
     ptyId: string,
+    tabName: string,
     parent: HTMLElement,
     terminalOpts?: Omit<TerminalOptions, "parent" | "sessionId" | "ptyId" | "onInput" | "onResize">,
   ): TumTerminal => {
@@ -168,71 +250,30 @@ export const useSessionStore = (transport: SessionTransport) => {
       ...terminalOpts,
     });
 
-    session.tabs.push({ ptyId, terminal });
+    session.tabs.push({ ptyId, name: tabName, terminal });
     return terminal;
   };
 
-  /**
-   * Attach an additional PTY to a session and return its ID.
-   *
-   * The caller should follow up with `mountTab` to render the new PTY.
-   */
-  const attachTab = async (sessionId: string, cwd?: string): Promise<string> => {
-    const resp = await transport.send({
-      kind: "attach_pty",
-      data: { session_id: sessionId, cwd },
-    });
-
-    return match(resp)
-      .with({ kind: "pty_attached" }, ({ data: { pty_id } }) => pty_id)
-      .otherwise((other) => {
-        throw new Error(`Unexpected response: ${other.kind}`);
-      });
-  };
-
-  /** Destroy a session and all its PTYs. */
-  const destroy = async (sessionId: string): Promise<void> => {
-    await transport.send({
-      kind: "destroy_session",
-      data: { session_id: sessionId },
-    });
-
-    // Clean up local state eagerly so the UI responds immediately.
-    // (The backend now also broadcasts session_destroyed, but this
-    // avoids any race with the async event channel.)
-    const idx = sessions.value.findIndex((s) => s.id === sessionId);
-    if (idx !== -1) {
-      for (const tab of sessions.value[idx].tabs) {
-        tab.terminal.dispose();
-      }
-      sessions.value.splice(idx, 1);
-    }
-  };
-
-  /** Get a session by ID. */
-  const get = (sessionId: string): SessionEntry | undefined =>
-    sessions.value.find((s) => s.id === sessionId);
-
-  /** All active sessions (reactive, read-only). */
-  const list = (): Readonly<Ref<SessionEntry[]>> => sessions;
-
   return {
     sessions: list(),
-    create,
-    mountTab,
-    attachTab,
-    destroy,
+    createSession,
+    destroySession,
+    attachPty,
+    destroyPty,
+    mountTerminal,
     get,
   };
 };
 
+// ── Global singleton ─────────────────────────────────────────────
+
 let _globalStore: ReturnType<typeof useSessionStore> | null = null;
 
 /**
- * Get or create a globally shared session store instance.
+ * Get the globally shared session store instance.
  *
  * Must be called after {@link initSessionStore} has been invoked
- * once by the integration layer (`@tum/core`).
+ * once by the integration layer.
  */
 export const getSessionStore = () => {
   if (!_globalStore) {

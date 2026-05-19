@@ -10,6 +10,7 @@ export type ClientMessage =
   | { kind: "attach_pty"; data: AttachPtyData }
   | { kind: "pty_input"; data: PtyInputData }
   | { kind: "pty_resize"; data: PtyResizeData }
+  | { kind: "destroy_pty"; data: DestroyPtyData }
   | { kind: "destroy_session"; data: DestroySessionData }
   | { kind: "list_sessions" };
 
@@ -35,6 +36,11 @@ export interface PtyResizeData {
   pty_id: string;
   rows: number;
   cols: number;
+}
+
+export interface DestroyPtyData {
+  session_id: string;
+  pty_id: string;
 }
 
 export interface DestroySessionData {

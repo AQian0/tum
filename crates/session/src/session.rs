@@ -110,6 +110,28 @@ impl Session {
         guard.first().map(|p| p.id.clone()).unwrap_or_default()
     }
 
+    /// Destroy a specific PTY, removing it from the session.
+    ///
+    /// The PTY process is killed and its reader thread will exit,
+    /// triggering the normal `pty:exit` → `session:all_pty_exited` cleanup
+    /// chain if this was the last PTY.
+    pub fn destroy_pty(&self, pty_id: &str) -> Result<(), String> {
+        let mut guard = self.ptys.lock().unwrap();
+        let idx = guard
+            .iter()
+            .position(|p| p.id == pty_id)
+            .ok_or_else(|| format!("PTY not found: {pty_id}"))?;
+
+        // Kill the process — this will cause the reader thread to exit
+        // and emit pty:exit.
+        let pty = guard.remove(idx);
+        let mut proc = pty.process.lock().unwrap();
+        proc.kill().map_err(|e| e.to_string())?;
+
+        log::info!("PTY {pty_id} destroyed in session {}", self.id);
+        Ok(())
+    }
+
     /// Spawn a single PTY, wire up its reader thread to the event bus,
     /// and return a [`PtyHandle`].
     fn spawn_pty_inner(

@@ -72,6 +72,13 @@ impl PtyProcess {
     pub fn process_id(&self) -> Option<u32> {
         self.child.process_id()
     }
+
+    /// Kill the child process.
+    pub fn kill(&mut self) -> Result<(), PtyError> {
+        self.child
+            .kill()
+            .map_err(|e| PtyError::Write(e.to_string()))
+    }
 }
 
 /// Spawn a shell in a new PTY.

@@ -4,7 +4,7 @@ import TabBar from "./components/TabBar.vue";
 import { useTabs } from "@tum/core";
 
 const viewportRef = useTemplateRef<HTMLElement>("viewport");
-const { sessions, activeSessionId, addTab, switchTab, closeTab } = useTabs(viewportRef);
+const { tabs, activeTabId, addTab, switchTab, closeTab } = useTabs(viewportRef);
 
 onMounted(() => addTab("bash"));
 </script>
@@ -12,8 +12,8 @@ onMounted(() => addTab("bash"));
 <template>
   <div class="flex flex-col w-full h-full bg-app-bg">
     <TabBar
-      :sessions="sessions"
-      :activeSessionId="activeSessionId"
+      :tabs="tabs"
+      :activeTabId="activeTabId"
       @switch="switchTab"
       @close="closeTab"
       @add="addTab()"

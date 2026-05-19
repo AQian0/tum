@@ -49,6 +49,11 @@ pub enum ClientMessage {
         rows: u16,
         cols: u16,
     },
+    /// Destroy a single PTY within a session.
+    DestroyPty {
+        session_id: String,
+        pty_id: String,
+    },
     /// Destroy a session and all its PTYs.
     DestroySession {
         session_id: String,
