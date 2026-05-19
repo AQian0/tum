@@ -3,7 +3,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { send } from "@tum/core";
 
 const DEFAULT_THEME = {
   background: "#0d0e14",
@@ -36,6 +35,16 @@ export interface TerminalOptions {
   /** Session and PTY IDs for routing I/O to the correct backend PTY. */
   sessionId: string;
   ptyId: string;
+  /**
+   * Called when the user types into the terminal.
+   * The callback receives the raw string data (before encoding).
+   */
+  onInput: (data: string) => void;
+  /**
+   * Called when the terminal is resized (by FitAddon or programmatically).
+   * The callback receives the new rows and cols.
+   */
+  onResize: (rows: number, cols: number) => void;
   /** Optional welcome message written on mount. */
   welcomeMessage?: string;
   /** Font size in pixels (default 14). */
@@ -99,8 +108,8 @@ export class TumTerminal {
       this.xterm.writeln(opts.welcomeMessage);
     }
 
-    this.xterm.onData((data) => this.handleInput(data));
-    this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols));
+    this.xterm.onData((data) => this.handleInput(data, opts));
+    this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols, opts));
 
     // Window resize → re-fit the terminal (skip if detached)
     this.resizeHandler = () => {
@@ -211,29 +220,19 @@ export class TumTerminal {
     }
   }
 
-  private handleInput(data: string): void {
-    const encoder = new TextEncoder();
-    const bytes = Array.from(encoder.encode(data));
-
-    send({
-      kind: "pty_input",
-      data: {
-        session_id: this.sessionId,
-        pty_id: this.ptyId,
-        data: bytes,
-      },
-    }).catch((err) => console.error("Failed to write to PTY:", err));
+  private handleInput(data: string, opts: TerminalOptions): void {
+    try {
+      opts.onInput(data);
+    } catch (err) {
+      console.error("Error in terminal onInput callback:", err);
+    }
   }
 
-  private handleResize(rows: number, cols: number): void {
-    send({
-      kind: "pty_resize",
-      data: {
-        session_id: this.sessionId,
-        pty_id: this.ptyId,
-        rows,
-        cols,
-      },
-    }).catch((err) => console.error("Failed to resize PTY:", err));
+  private handleResize(rows: number, cols: number, opts: TerminalOptions): void {
+    try {
+      opts.onResize(rows, cols);
+    } catch (err) {
+      console.error("Error in terminal onResize callback:", err);
+    }
   }
 }

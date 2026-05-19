@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SessionEntry } from "@tum/session";
+import type { SessionEntry } from "@tum/core";
 
 const props = defineProps<{
   sessions: readonly SessionEntry[];

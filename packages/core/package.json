@@ -8,7 +8,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@tauri-apps/api": "catalog:"
+    "@tauri-apps/api": "catalog:",
+    "@tum/session": "workspace:*",
+    "ts-pattern": "catalog:",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:"

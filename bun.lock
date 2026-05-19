@@ -12,9 +12,6 @@
         "@tauri-apps/api": "catalog:",
         "@tum/core": "workspace:*",
         "@tum/keymap": "workspace:*",
-        "@tum/session": "workspace:*",
-        "@tum/terminal": "workspace:*",
-        "ts-pattern": "catalog:",
         "vue": "catalog:",
       },
       "devDependencies": {
@@ -34,6 +31,9 @@
       "version": "0.1.0",
       "dependencies": {
         "@tauri-apps/api": "catalog:",
+        "@tum/session": "workspace:*",
+        "ts-pattern": "catalog:",
+        "vue": "catalog:",
       },
       "devDependencies": {
         "typescript": "catalog:",
@@ -50,7 +50,6 @@
       "name": "@tum/session",
       "version": "0.1.0",
       "dependencies": {
-        "@tauri-apps/api": "catalog:",
         "@tum/core": "workspace:*",
         "@tum/terminal": "workspace:*",
         "ts-pattern": "catalog:",
@@ -61,7 +60,6 @@
       "name": "@tum/terminal",
       "version": "0.1.0",
       "dependencies": {
-        "@tum/core": "workspace:*",
         "@xterm/addon-fit": "catalog:",
         "@xterm/addon-web-links": "catalog:",
         "@xterm/addon-webgl": "catalog:",

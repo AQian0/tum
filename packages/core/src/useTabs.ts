@@ -10,6 +10,10 @@ import type { SessionEntry } from "@tum/session";
  * terminal is visible at a time — switching tabs detaches the current
  * terminal from the viewport and attaches the target terminal in its
  * place, keeping all terminal instances alive in the background.
+ *
+ * This composable belongs in `@tum/core` because it is integration
+ * logic: it orchestrates the session store, terminal lifecycle, and
+ * DOM viewport.  `@tum/app` consumes it but does not own it.
  */
 export const useTabs = (viewportRef: Ref<HTMLElement | null>) => {
   const store = getSessionStore();

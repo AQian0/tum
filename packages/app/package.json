@@ -15,9 +15,6 @@
     "@tauri-apps/api": "catalog:",
     "@tum/core": "workspace:*",
     "@tum/keymap": "workspace:*",
-    "@tum/session": "workspace:*",
-    "@tum/terminal": "workspace:*",
-    "ts-pattern": "catalog:",
     "vue": "catalog:"
   },
   "devDependencies": {

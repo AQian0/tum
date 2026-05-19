@@ -1,8 +1,7 @@
 import { ref, type Ref } from "vue";
 import { match } from "ts-pattern";
-import { send, onEvent } from "@tum/core";
+import type { ClientMessage, ServerMessage, ServerEvent } from "@tum/core";
 import { TumTerminal, type TerminalOptions } from "@tum/terminal";
-import type { ServerEvent } from "@tum/core";
 
 /** A single terminal tab/pane within a session, backed by a TumTerminal. */
 export interface SessionTab {
@@ -18,27 +17,45 @@ export interface SessionEntry {
 }
 
 /**
+ * Transport abstraction injected by the integration layer (`@tum/core`).
+ *
+ * `@tum/session` does not import any runtime code from `@tum/core`;
+ * it only uses its types and receives the actual IPC functions at
+ * store-creation time.  This keeps `session` decoupled from the
+ * communication backend while staying fully typed.
+ */
+export interface SessionTransport {
+  /** Send a message to the backend and wait for a synchronous response. */
+  send(message: ClientMessage): Promise<ServerMessage>;
+  /**
+   * Subscribe to push events from the backend.
+   * Returns an unsubscribe function.
+   */
+  subscribe(handler: (event: ServerEvent) => void): () => void;
+}
+
+/**
  * Reactive session store for the tum terminal application.
  *
  * Usage:
  * ```ts
- * const store = useSessionStore();
+ * const store = useSessionStore(transport);
  * const session = await store.create({ name: "my-project" });
  * // Mount the initial PTY terminal into the DOM:
  * const term = store.mountTab(session.id, containerEl);
  * term.focus();
  * ```
  */
-export const useSessionStore = () => {
+export const useSessionStore = (transport: SessionTransport) => {
   const sessions: Ref<SessionEntry[]> = ref([]);
 
   let initialised = false;
 
-  const ensureListeners = async () => {
+  const ensureListeners = () => {
     if (initialised) return;
     initialised = true;
 
-    void onEvent((event: ServerEvent) => {
+    transport.subscribe((event: ServerEvent) => {
       match(event)
         .with({ kind: "pty_output" }, ({ data: { session_id, pty_id, data } }) => {
           for (const session of sessions.value) {
@@ -86,9 +103,9 @@ export const useSessionStore = () => {
     cwd?: string;
     command?: string;
   }): Promise<{ session: SessionEntry; ptyId: string }> => {
-    await ensureListeners();
+    ensureListeners();
 
-    const resp = await send({
+    const resp = await transport.send({
       kind: "create_session",
       data: { name: opts.name, cwd: opts.cwd, command: opts.command },
     });
@@ -119,7 +136,7 @@ export const useSessionStore = () => {
     sessionId: string,
     ptyId: string,
     parent: HTMLElement,
-    terminalOpts?: Omit<TerminalOptions, "parent" | "sessionId" | "ptyId">,
+    terminalOpts?: Omit<TerminalOptions, "parent" | "sessionId" | "ptyId" | "onInput" | "onResize">,
   ): TumTerminal => {
     const session = sessions.value.find((s) => s.id === sessionId);
     if (!session) {
@@ -130,6 +147,24 @@ export const useSessionStore = () => {
       parent,
       sessionId,
       ptyId,
+      onInput: (data) => {
+        const encoder = new TextEncoder();
+        const bytes = Array.from(encoder.encode(data));
+        transport
+          .send({
+            kind: "pty_input",
+            data: { session_id: sessionId, pty_id: ptyId, data: bytes },
+          })
+          .catch((err) => console.error("Failed to write to PTY:", err));
+      },
+      onResize: (rows, cols) => {
+        transport
+          .send({
+            kind: "pty_resize",
+            data: { session_id: sessionId, pty_id: ptyId, rows, cols },
+          })
+          .catch((err) => console.error("Failed to resize PTY:", err));
+      },
       ...terminalOpts,
     });
 
@@ -143,7 +178,7 @@ export const useSessionStore = () => {
    * The caller should follow up with `mountTab` to render the new PTY.
    */
   const attachTab = async (sessionId: string, cwd?: string): Promise<string> => {
-    const resp = await send({
+    const resp = await transport.send({
       kind: "attach_pty",
       data: { session_id: sessionId, cwd },
     });
@@ -157,7 +192,7 @@ export const useSessionStore = () => {
 
   /** Destroy a session and all its PTYs. */
   const destroy = async (sessionId: string): Promise<void> => {
-    await send({
+    await transport.send({
       kind: "destroy_session",
       data: { session_id: sessionId },
     });
@@ -193,10 +228,28 @@ export const useSessionStore = () => {
 
 let _globalStore: ReturnType<typeof useSessionStore> | null = null;
 
-/** Get or create a globally shared session store instance. */
+/**
+ * Get or create a globally shared session store instance.
+ *
+ * Must be called after {@link initSessionStore} has been invoked
+ * once by the integration layer (`@tum/core`).
+ */
 export const getSessionStore = () => {
   if (!_globalStore) {
-    _globalStore = useSessionStore();
+    throw new Error("Session store not initialised. Call initSessionStore(transport) first.");
   }
+  return _globalStore;
+};
+
+/**
+ * Initialise the global session store with a transport.
+ * Called once by `@tum/core` at startup.
+ */
+export const initSessionStore = (transport: SessionTransport) => {
+  if (_globalStore) {
+    console.warn("Session store already initialised; ignoring duplicate call.");
+    return _globalStore;
+  }
+  _globalStore = useSessionStore(transport);
   return _globalStore;
 };

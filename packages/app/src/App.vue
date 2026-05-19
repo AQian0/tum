@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, useTemplateRef } from "vue";
 import TabBar from "./components/TabBar.vue";
-import { useTabs } from "./composables/useTabs";
+import { useTabs } from "@tum/core";
 
 const viewportRef = useTemplateRef<HTMLElement>("viewport");
 const { sessions, activeSessionId, addTab, switchTab, closeTab } = useTabs(viewportRef);
