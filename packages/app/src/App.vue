@@ -1,24 +1,7 @@
 <script setup lang="ts">
-import { onMounted, useTemplateRef } from "vue";
-import TabBar from "./components/TabBar.vue";
-import { useTabs } from "@tum/core";
-
-const viewportRef = useTemplateRef<HTMLElement>("viewport");
-const { tabs, activeTabId, addTab, switchTab, closeTab } = useTabs(viewportRef);
-
-onMounted(() => addTab("bash"));
+import DockLayout from "./components/DockLayout.vue";
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full bg-app-bg">
-    <TabBar
-      :tabs="tabs"
-      :activeTabId="activeTabId"
-      @switch="switchTab"
-      @close="closeTab"
-      @add="addTab()"
-    />
-
-    <div ref="viewport" class="flex-1 overflow-hidden bg-app-bg" />
-  </div>
+  <DockLayout class="w-full h-full" />
 </template>

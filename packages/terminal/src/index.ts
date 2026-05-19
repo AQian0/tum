@@ -55,6 +55,7 @@ export class TumTerminal {
   private resizeHandler: () => void;
   private sessionId: string;
   private ptyId: string;
+  private _disposed = false;
 
   constructor(opts: TerminalOptions) {
     this.sessionId = opts.sessionId;
@@ -127,6 +128,8 @@ export class TumTerminal {
   }
 
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
     window.removeEventListener("resize", this.resizeHandler);
     this.xterm.dispose();
   }

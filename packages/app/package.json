@@ -15,6 +15,7 @@
     "@tauri-apps/api": "catalog:",
     "@tum/core": "workspace:*",
     "@tum/keymap": "workspace:*",
+    "dockview-vue": "catalog:",
     "vue": "catalog:"
   },
   "devDependencies": {

@@ -22,18 +22,35 @@
 
   html,
   body {
+    height: 100%;
+    margin: 0;
     overflow: hidden;
     background-color: var(--color-app-bg);
   }
 
-  .xterm,
-  .xterm-viewport {
-    background-color: var(--color-app-bg) !important;
+  #app {
+    height: 100%;
   }
+}
+
+.dockview-theme-dark {
+  --dv-group-view-background-color: #0d0e14;
+  --dv-tabs-and-actions-container-background-color: #12131a;
+  --dv-activegroup-visiblepanel-tab-background-color: #0d0e14;
+  --dv-activegroup-hiddenpanel-tab-background-color: #12131a;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #12131a;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #12131a;
+  --dv-tab-divider-color: #1e1f2a;
+  --dv-separator-border: #1e1f2a;
+  --dv-paneview-header-border-color: #1e1f2a;
+  --dv-tabs-and-actions-container-height: 32px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-active-sash-color: #c084fc;
 }
 
 @utility scrollbar-none {
   scrollbar-width: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
