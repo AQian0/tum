@@ -11,7 +11,7 @@ import type { SessionEntry } from "@tum/session";
  * terminal from the viewport and attaches the target terminal in its
  * place, keeping all terminal instances alive in the background.
  */
-export function useTabs(viewportRef: Ref<HTMLElement | null>) {
+export const useTabs = (viewportRef: Ref<HTMLElement | null>) => {
   const store = getSessionStore();
   const sessions = store.sessions as Ref<SessionEntry[]>;
 
@@ -19,17 +19,17 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
 
   let tabCounter = 0;
 
-  function activeTerminal() {
+  const activeTerminal = () => {
     if (!activeSessionId.value) return null;
     const session = store.get(activeSessionId.value);
     return session?.tabs[0]?.terminal ?? null;
-  }
+  };
 
-  function detachCurrent(): void {
+  const detachCurrent = (): void => {
     activeTerminal()?.detach();
-  }
+  };
 
-  function attachSession(sessionId: string): void {
+  const attachSession = (sessionId: string): void => {
     const session = store.get(sessionId);
     const term = session?.tabs[0]?.terminal;
     const parent = viewportRef.value;
@@ -38,9 +38,9 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
 
     term.attach(parent);
     term.focus();
-  }
+  };
 
-  async function addTab(name?: string): Promise<void> {
+  const addTab = async (name?: string): Promise<void> => {
     detachCurrent();
 
     const label = name ?? `Tab ${++tabCounter}`;
@@ -53,17 +53,17 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
     }
 
     activeSessionId.value = session.id;
-  }
+  };
 
-  function switchTab(sessionId: string): void {
+  const switchTab = (sessionId: string): void => {
     if (activeSessionId.value === sessionId) return;
 
     detachCurrent();
     attachSession(sessionId);
     activeSessionId.value = sessionId;
-  }
+  };
 
-  async function closeTab(sessionId: string): Promise<void> {
+  const closeTab = async (sessionId: string): Promise<void> => {
     const list = sessions.value;
     const idx = list.findIndex((s) => s.id === sessionId);
     if (idx === -1) return;
@@ -80,7 +80,7 @@ export function useTabs(viewportRef: Ref<HTMLElement | null>) {
     if (sessions.value.length === 0) {
       await addTab();
     }
-  }
+  };
 
   // When the store cleans up the active session (e.g. PTY exits),
   // switch to another tab if available.

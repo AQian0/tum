@@ -29,12 +29,12 @@ export interface SessionEntry {
  * term.focus();
  * ```
  */
-export function useSessionStore() {
+export const useSessionStore = () => {
   const sessions: Ref<SessionEntry[]> = ref([]);
 
   let initialised = false;
 
-  async function ensureListeners() {
+  const ensureListeners = async () => {
     if (initialised) return;
     initialised = true;
 
@@ -73,7 +73,7 @@ export function useSessionStore() {
         })
         .exhaustive();
     });
-  }
+  };
 
   /**
    * Create a new session with one PTY tab.
@@ -81,9 +81,9 @@ export function useSessionStore() {
    * Returns the `SessionEntry` and the initial PTY ID so the caller can
    * mount a terminal widget.
    */
-  async function create(
+  const create = async (
     opts: { name?: string; cwd?: string; command?: string },
-  ): Promise<{ session: SessionEntry; ptyId: string }> {
+  ): Promise<{ session: SessionEntry; ptyId: string }> => {
     await ensureListeners();
 
     const resp = await send({
@@ -104,7 +104,7 @@ export function useSessionStore() {
       .otherwise((other) => {
         throw new Error(`Unexpected response: ${other.kind}`);
       });
-  }
+  };
 
   /**
    * Create a terminal widget for a specific PTY and mount it into the DOM.
@@ -113,12 +113,12 @@ export function useSessionStore() {
    * `create()` or `attachTab()`).  Extra options (welcomeMessage,
    * fontSize, theme, etc.) are forwarded to `TumTerminal`.
    */
-  function mountTab(
+  const mountTab = (
     sessionId: string,
     ptyId: string,
     parent: HTMLElement,
     terminalOpts?: Omit<TerminalOptions, "parent" | "sessionId" | "ptyId">,
-  ): TumTerminal {
+  ): TumTerminal => {
     const session = sessions.value.find((s) => s.id === sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -133,14 +133,14 @@ export function useSessionStore() {
 
     session.tabs.push({ ptyId, terminal });
     return terminal;
-  }
+  };
 
   /**
    * Attach an additional PTY to a session and return its ID.
    *
    * The caller should follow up with `mountTab` to render the new PTY.
    */
-  async function attachTab(sessionId: string, cwd?: string): Promise<string> {
+  const attachTab = async (sessionId: string, cwd?: string): Promise<string> => {
     const resp = await send({
       kind: "attach_pty",
       data: { session_id: sessionId, cwd },
@@ -151,10 +151,10 @@ export function useSessionStore() {
       .otherwise((other) => {
         throw new Error(`Unexpected response: ${other.kind}`);
       });
-  }
+  };
 
   /** Destroy a session and all its PTYs. */
-  async function destroy(sessionId: string): Promise<void> {
+  const destroy = async (sessionId: string): Promise<void> => {
     await send({
       kind: "destroy_session",
       data: { session_id: sessionId },
@@ -170,17 +170,14 @@ export function useSessionStore() {
       }
       sessions.value.splice(idx, 1);
     }
-  }
+  };
 
   /** Get a session by ID. */
-  function get(sessionId: string): SessionEntry | undefined {
-    return sessions.value.find((s) => s.id === sessionId);
-  }
+  const get = (sessionId: string): SessionEntry | undefined =>
+    sessions.value.find((s) => s.id === sessionId);
 
   /** All active sessions (reactive, read-only). */
-  function list(): Readonly<Ref<SessionEntry[]>> {
-    return sessions;
-  }
+  const list = (): Readonly<Ref<SessionEntry[]>> => sessions;
 
   return {
     sessions: list(),
@@ -195,9 +192,9 @@ export function useSessionStore() {
 let _globalStore: ReturnType<typeof useSessionStore> | null = null;
 
 /** Get or create a globally shared session store instance. */
-export function getSessionStore() {
+export const getSessionStore = () => {
   if (!_globalStore) {
     _globalStore = useSessionStore();
   }
   return _globalStore;
-}
+};
