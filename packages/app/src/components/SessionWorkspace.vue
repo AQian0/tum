@@ -4,11 +4,18 @@ import { DockviewVue } from "dockview-vue";
 import type { DockviewReadyEvent } from "dockview-vue";
 import { onEvent } from "@tum/core";
 import type { ServerEvent } from "@tum/core";
+import TerminalPane from "./TerminalPane.vue";
 import type {
   PaneSplitDirection,
   SessionWorkspaceController,
   WorkspacePanelParams,
-} from "./workspace";
+} from "../types/workspace";
+
+defineOptions({
+  components: {
+    TerminalPane,
+  },
+});
 
 const props = defineProps<{
   params: {

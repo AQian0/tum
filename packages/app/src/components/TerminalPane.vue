@@ -84,15 +84,7 @@ watch(
 <template>
   <div
     ref="container"
-    class="terminal-pane-container w-full h-full bg-app-bg"
+    class="terminal-pane-container h-full min-h-0 w-full min-w-0 overflow-hidden bg-app-bg"
     :data-pty-id="panelParams.ptyId"
   />
 </template>
-
-<style scoped>
-.terminal-pane-container {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-</style>

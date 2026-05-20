@@ -3,14 +3,23 @@ import { onBeforeUnmount, provide, shallowRef } from "vue";
 import { DockviewVue } from "dockview-vue";
 import type { DockviewReadyEvent } from "dockview-vue";
 import { createDockSession } from "@tum/core";
-import { workspaceActionsKey } from "./workspace";
+import SessionWorkspace from "./SessionWorkspace.vue";
+import WorkspaceDockChrome from "./WorkspaceDockChrome.vue";
+import { workspaceActionsKey } from "../injectionKeys/workspace";
 import type {
   DockSessionController,
   PaneSplitDirection,
   SessionWorkspaceController,
   WorkspaceActions,
   WorkspacePanelParams,
-} from "./workspace";
+} from "../types/workspace";
+
+defineOptions({
+  components: {
+    SessionWorkspace,
+    WorkspaceDockChrome,
+  },
+});
 
 type WorkspacePosition = {
   direction: PaneSplitDirection | "within";
@@ -197,8 +206,8 @@ defineExpose({
     class="dockview-theme-dark workspace-dock h-full w-full"
     :singleTabMode="'default'"
     :noPanelsOverlay="'watermark'"
-    :defaultTabComponent="'WorkspaceTab'"
-    :rightHeaderActionsComponent="'WorkspaceNewTabButton'"
+    :defaultTabComponent="'WorkspaceDockChrome'"
+    :rightHeaderActionsComponent="'WorkspaceDockChrome'"
     @ready="onReady"
   />
 </template>
