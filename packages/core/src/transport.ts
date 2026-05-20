@@ -1,6 +1,6 @@
 import { send, onEvent } from "./api";
 import type { SessionTransport } from "@tum/session";
-import type { ServerEvent } from "./types";
+import type { ServerEvent } from "./protocol";
 
 export function createSessionTransport(): SessionTransport {
   return {

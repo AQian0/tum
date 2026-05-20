@@ -1,4 +1,4 @@
-export type * from "./types";
+export type * from "./protocol";
 export { send, onEvent } from "./api";
 export { createSessionTransport } from "./transport";
 export { createDockSession } from "./createDockSession";

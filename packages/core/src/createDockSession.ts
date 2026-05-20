@@ -18,23 +18,23 @@ export const createDockSession = () => {
   let counter = 1;
 
   const session = (): SessionEntry | undefined => {
-    const id = sessionId.value;
-    return id ? store.get(id) : undefined;
+    const currentSessionId = sessionId.value;
+    return currentSessionId ? store.get(currentSessionId) : undefined;
   };
 
   const findTerminal = (ptyId: string): SessionTab["terminal"] | null => {
-    const s = session();
-    if (!s) return null;
-    return s.tabs.find((t) => t.ptyId === ptyId)?.terminal ?? null;
+    const currentSession = session();
+    if (!currentSession) return null;
+    return currentSession.tabs.find((tab) => tab.ptyId === ptyId)?.terminal ?? null;
   };
 
   const createPanePty = async (name?: string): Promise<TerminalPaneParams> => {
     const label = name ?? `Pane ${counter++}`;
 
     if (!sessionId.value) {
-      const { session: sess, ptyId } = await store.createSession({ name: "tum" });
-      sessionId.value = sess.id;
-      return { sessionId: sess.id, ptyId, name: label };
+      const { session: createdSession, ptyId } = await store.createSession({ name: "tum" });
+      sessionId.value = createdSession.id;
+      return { sessionId: createdSession.id, ptyId, name: label };
     }
 
     const ptyId = await store.attachPty(sessionId.value);
@@ -42,26 +42,26 @@ export const createDockSession = () => {
   };
 
   const mountPaneTerminal = (
-    sessId: string,
+    sessionId: string,
     ptyId: string,
     name: string,
     parent: HTMLElement,
   ): SessionTab["terminal"] => {
-    return store.mountTerminal(sessId, ptyId, name, parent, {
+    return store.mountTerminal(sessionId, ptyId, name, parent, {
       welcomeMessage: `Welcome to tum — ${name}\r\n`,
     });
   };
 
   const destroyPane = async (ptyId: string): Promise<void> => {
-    const sid = sessionId.value;
-    if (!sid) return;
+    const currentSessionId = sessionId.value;
+    if (!currentSessionId) return;
 
-    const term = findTerminal(ptyId);
-    if (term) {
-      term.dispose();
+    const terminal = findTerminal(ptyId);
+    if (terminal) {
+      terminal.dispose();
     }
 
-    await store.destroyPty(sid, ptyId);
+    await store.destroyPty(currentSessionId, ptyId);
   };
 
   return {

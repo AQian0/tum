@@ -13,13 +13,11 @@ const dockApi = shallowRef<DockviewReadyEvent["api"] | null>(null);
 const onReady = (event: DockviewReadyEvent) => {
   dockApi.value = event.api;
 
-  event.api.onDidRemovePanel((e) => {
-    const ptyId = panelPtyMap.get(e.id);
+  event.api.onDidRemovePanel((removedPanelEvent) => {
+    const ptyId = panelPtyMap.get(removedPanelEvent.id);
     if (ptyId) {
-      panelPtyMap.delete(e.id);
-      destroyPane(ptyId).catch((err) =>
-        console.error("Failed to destroy PTY:", err),
-      );
+      panelPtyMap.delete(removedPanelEvent.id);
+      destroyPane(ptyId).catch((error) => console.error("Failed to destroy PTY:", error));
     }
 
     if (event.api.panels.length === 0) {
@@ -27,12 +25,12 @@ const onReady = (event: DockviewReadyEvent) => {
     }
   });
 
-  onEvent((ev: ServerEvent) => {
-    if (ev.kind !== "pty_exit") return;
+  onEvent((serverEvent: ServerEvent) => {
+    if (serverEvent.kind !== "ptyExit") return;
 
     for (const panel of event.api.panels) {
       const params = panel.params as Record<string, unknown> | undefined;
-      if (params?.ptyId === ev.data.pty_id) {
+      if (params?.ptyId === serverEvent.data.ptyId) {
         event.api.removePanel(panel);
         break;
       }
@@ -52,8 +50,8 @@ const addInitialPane = async (api: NonNullable<typeof dockApi.value>) => {
       title: params.name,
       params: {
         ...params,
-        mountTerminal: (sid: string, pid: string, name: string, el: HTMLElement) =>
-          mountPaneTerminal(sid, pid, name, el),
+        mountTerminal: (sessionId: string, ptyId: string, name: string, element: HTMLElement) =>
+          mountPaneTerminal(sessionId, ptyId, name, element),
         destroyPane: async (ptyId: string) => {
           await destroyPane(ptyId);
         },
@@ -61,8 +59,8 @@ const addInitialPane = async (api: NonNullable<typeof dockApi.value>) => {
     });
 
     panelPtyMap.set(panel.id, params.ptyId);
-  } catch (err) {
-    console.error("Failed to create initial pane:", err);
+  } catch (error) {
+    console.error("Failed to create initial pane:", error);
   }
 };
 
@@ -89,8 +87,8 @@ const splitPane = async (direction: "right" | "below" | "left" | "above") => {
       },
       params: {
         ...params,
-        mountTerminal: (sid: string, pid: string, name: string, el: HTMLElement) =>
-          mountPaneTerminal(sid, pid, name, el),
+        mountTerminal: (sessionId: string, ptyId: string, name: string, element: HTMLElement) =>
+          mountPaneTerminal(sessionId, ptyId, name, element),
         destroyPane: async (ptyId: string) => {
           await destroyPane(ptyId);
         },
@@ -98,8 +96,8 @@ const splitPane = async (direction: "right" | "below" | "left" | "above") => {
     });
 
     panelPtyMap.set(panel.id, params.ptyId);
-  } catch (err) {
-    console.error("Failed to split pane:", err);
+  } catch (error) {
+    console.error("Failed to split pane:", error);
   }
 };
 

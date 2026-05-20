@@ -4,7 +4,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
-const DEFAULT_THEME = {
+const defaultTheme = {
   background: "#0d0e14",
   foreground: "#c8c8d0",
   cursor: "#c084fc",
@@ -38,14 +38,14 @@ export interface TerminalOptions {
   welcomeMessage?: string;
   fontSize?: number;
   fontFamily?: string;
-  theme?: Partial<typeof DEFAULT_THEME>;
+  theme?: Partial<typeof defaultTheme>;
   rows?: number;
   cols?: number;
 }
 
 export interface PtyOutputPayload {
-  session_id: string;
-  pty_id: string;
+  sessionId: string;
+  ptyId: string;
   data: number[];
 }
 
@@ -55,21 +55,21 @@ export class TumTerminal {
   private resizeHandler: () => void;
   private sessionId: string;
   private ptyId: string;
-  private _disposed = false;
+  private disposed = false;
 
-  constructor(opts: TerminalOptions) {
-    this.sessionId = opts.sessionId;
-    this.ptyId = opts.ptyId;
+  constructor(options: TerminalOptions) {
+    this.sessionId = options.sessionId;
+    this.ptyId = options.ptyId;
 
     this.xterm = new Terminal({
-      rows: opts.rows ?? 24,
-      cols: opts.cols ?? 80,
+      rows: options.rows ?? 24,
+      cols: options.cols ?? 80,
       cursorBlink: true,
       cursorStyle: "bar",
-      fontSize: opts.fontSize ?? 14,
+      fontSize: options.fontSize ?? 14,
       fontFamily:
-        opts.fontFamily ?? "'JetBrains Mono', 'Fira Code', ui-monospace, Consolas, monospace",
-      theme: { ...DEFAULT_THEME, ...opts.theme },
+        options.fontFamily ?? "'JetBrains Mono', 'Fira Code', ui-monospace, Consolas, monospace",
+      theme: { ...defaultTheme, ...options.theme },
     });
 
     this.fitAddon = new FitAddon();
@@ -83,18 +83,18 @@ export class TumTerminal {
 
     this.xterm.loadAddon(new WebLinksAddon());
 
-    this.xterm.open(opts.parent);
+    this.xterm.open(options.parent);
     requestAnimationFrame(() => {
       this.fitAddon.fit();
       this.fillToEdge();
     });
 
-    if (opts.welcomeMessage) {
-      this.xterm.writeln(opts.welcomeMessage);
+    if (options.welcomeMessage) {
+      this.xterm.writeln(options.welcomeMessage);
     }
 
-    this.xterm.onData((data) => this.handleInput(data, opts));
-    this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols, opts));
+    this.xterm.onData((data) => this.handleInput(data, options));
+    this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols, options));
 
     this.resizeHandler = () => {
       if (!this.xterm.element?.isConnected) return;
@@ -105,7 +105,7 @@ export class TumTerminal {
   }
 
   writeOutput(payload: PtyOutputPayload): void {
-    if (payload.session_id === this.sessionId && payload.pty_id === this.ptyId) {
+    if (payload.sessionId === this.sessionId && payload.ptyId === this.ptyId) {
       this.xterm.write(new Uint8Array(payload.data));
     }
   }
@@ -128,8 +128,8 @@ export class TumTerminal {
   }
 
   dispose(): void {
-    if (this._disposed) return;
-    this._disposed = true;
+    if (this.disposed) return;
+    this.disposed = true;
     window.removeEventListener("resize", this.resizeHandler);
     this.xterm.dispose();
   }
@@ -143,16 +143,16 @@ export class TumTerminal {
   }
 
   detach(): void {
-    const el = this.xterm.element;
-    if (el && el.parentElement) {
-      el.parentElement.removeChild(el);
+    const element = this.xterm.element;
+    if (element && element.parentElement) {
+      element.parentElement.removeChild(element);
     }
   }
 
   attach(parent: HTMLElement): void {
-    const el = this.xterm.element;
-    if (!el) return;
-    parent.appendChild(el);
+    const element = this.xterm.element;
+    if (!element) return;
+    parent.appendChild(element);
     requestAnimationFrame(() => {
       this.fitAddon.fit();
       this.fillToEdge();
@@ -189,19 +189,19 @@ export class TumTerminal {
     }
   }
 
-  private handleInput(data: string, opts: TerminalOptions): void {
+  private handleInput(data: string, options: TerminalOptions): void {
     try {
-      opts.onInput(data);
-    } catch (err) {
-      console.error("Error in terminal onInput callback:", err);
+      options.onInput(data);
+    } catch (error) {
+      console.error("Error in terminal onInput callback:", error);
     }
   }
 
-  private handleResize(rows: number, cols: number, opts: TerminalOptions): void {
+  private handleResize(rows: number, cols: number, options: TerminalOptions): void {
     try {
-      opts.onResize(rows, cols);
-    } catch (err) {
-      console.error("Error in terminal onResize callback:", err);
+      options.onResize(rows, cols);
+    } catch (error) {
+      console.error("Error in terminal onResize callback:", error);
     }
   }
 }

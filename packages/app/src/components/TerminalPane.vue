@@ -12,7 +12,12 @@ const props = defineProps<{
       sessionId: string;
       ptyId: string;
       name: string;
-      mountTerminal?: (sessionId: string, ptyId: string, name: string, el: HTMLElement) => {
+      mountTerminal?: (
+        sessionId: string,
+        ptyId: string,
+        name: string,
+        el: HTMLElement,
+      ) => {
         dispose(): void;
         detach(): void;
         focus(): void;

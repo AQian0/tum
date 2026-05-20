@@ -4,8 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const packagesDir = resolve(__dirname, "..");
+const configDir = dirname(fileURLToPath(import.meta.url));
+const packagesDir = resolve(configDir, "..");
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],

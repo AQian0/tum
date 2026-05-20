@@ -23,70 +23,70 @@ export interface SessionTransport {
 export const useSessionStore = (transport: SessionTransport) => {
   const sessions: Ref<SessionEntry[]> = ref([]);
 
-  let initialised = false;
+  let initialized = false;
 
   const ensureListeners = () => {
-    if (initialised) return;
-    initialised = true;
+    if (initialized) return;
+    initialized = true;
 
     transport.subscribe((event: ServerEvent) => {
       match(event)
-        .with({ kind: "pty_output" }, ({ data: { session_id, pty_id, data } }) => {
+        .with({ kind: "ptyOutput" }, ({ data: { sessionId, ptyId, data } }) => {
           for (const session of sessions.value) {
-            if (session.id === session_id) {
+            if (session.id === sessionId) {
               for (const tab of session.tabs) {
-                if (tab.ptyId === pty_id) {
-                  tab.terminal.writeOutput({ session_id, pty_id, data });
+                if (tab.ptyId === ptyId) {
+                  tab.terminal.writeOutput({ sessionId, ptyId, data });
                   return;
                 }
               }
             }
           }
         })
-        .with({ kind: "pty_exit" }, ({ data: { session_id, pty_id } }) => {
-          const session = sessions.value.find((s) => s.id === session_id);
+        .with({ kind: "ptyExit" }, ({ data: { sessionId, ptyId } }) => {
+          const session = sessions.value.find((entry) => entry.id === sessionId);
           if (!session) return;
 
-          const idx = session.tabs.findIndex((t) => t.ptyId === pty_id);
-          if (idx === -1) return;
+          const tabIndex = session.tabs.findIndex((tab) => tab.ptyId === ptyId);
+          if (tabIndex === -1) return;
 
-          session.tabs[idx].terminal.dispose();
-          session.tabs.splice(idx, 1);
+          session.tabs[tabIndex].terminal.dispose();
+          session.tabs.splice(tabIndex, 1);
         })
-        .with({ kind: "session_destroyed" }, ({ data: { session_id } }) => {
-          const idx = sessions.value.findIndex((s) => s.id === session_id);
-          if (idx === -1) return;
+        .with({ kind: "sessionDestroyed" }, ({ data: { sessionId } }) => {
+          const sessionIndex = sessions.value.findIndex((entry) => entry.id === sessionId);
+          if (sessionIndex === -1) return;
 
-          for (const tab of sessions.value[idx].tabs) {
+          for (const tab of sessions.value[sessionIndex].tabs) {
             tab.terminal.dispose();
           }
-          sessions.value.splice(idx, 1);
+          sessions.value.splice(sessionIndex, 1);
         })
         .exhaustive();
     });
   };
 
-  const createSession = async (opts: {
+  const createSession = async (options: {
     name?: string;
     cwd?: string;
     command?: string;
   }): Promise<{ session: SessionEntry; ptyId: string }> => {
     ensureListeners();
 
-    const resp = await transport.send({
-      kind: "create_session",
-      data: { name: opts.name, cwd: opts.cwd, command: opts.command },
+    const response = await transport.send({
+      kind: "createSession",
+      data: { name: options.name, cwd: options.cwd, command: options.command },
     });
 
-    return match(resp)
-      .with({ kind: "session_created" }, ({ data: { session_id, pty_id } }) => {
+    return match(response)
+      .with({ kind: "sessionCreated" }, ({ data: { sessionId, ptyId } }) => {
         const entry: SessionEntry = {
-          id: session_id,
-          name: opts.name ?? null,
+          id: sessionId,
+          name: options.name ?? null,
           tabs: [],
         };
         sessions.value.push(entry);
-        return { session: entry, ptyId: pty_id };
+        return { session: entry, ptyId };
       })
       .otherwise((other) => {
         throw new Error(`Unexpected response: ${other.kind}`);
@@ -95,50 +95,50 @@ export const useSessionStore = (transport: SessionTransport) => {
 
   const destroySession = async (sessionId: string): Promise<void> => {
     await transport.send({
-      kind: "destroy_session",
-      data: { session_id: sessionId },
+      kind: "destroySession",
+      data: { sessionId },
     });
 
-    const idx = sessions.value.findIndex((s) => s.id === sessionId);
-    if (idx !== -1) {
-      for (const tab of sessions.value[idx].tabs) {
+    const sessionIndex = sessions.value.findIndex((session) => session.id === sessionId);
+    if (sessionIndex !== -1) {
+      for (const tab of sessions.value[sessionIndex].tabs) {
         tab.terminal.dispose();
       }
-      sessions.value.splice(idx, 1);
+      sessions.value.splice(sessionIndex, 1);
     }
   };
 
   const get = (sessionId: string): SessionEntry | undefined =>
-    sessions.value.find((s) => s.id === sessionId);
+    sessions.value.find((session) => session.id === sessionId);
 
   const list = (): Readonly<Ref<SessionEntry[]>> => sessions;
 
   const attachPty = async (sessionId: string, cwd?: string): Promise<string> => {
-    const resp = await transport.send({
-      kind: "attach_pty",
-      data: { session_id: sessionId, cwd },
+    const response = await transport.send({
+      kind: "attachPty",
+      data: { sessionId, cwd },
     });
 
-    return match(resp)
-      .with({ kind: "pty_attached" }, ({ data: { pty_id } }) => pty_id)
+    return match(response)
+      .with({ kind: "ptyAttached" }, ({ data: { ptyId } }) => ptyId)
       .otherwise((other) => {
         throw new Error(`Unexpected response: ${other.kind}`);
       });
   };
 
   const destroyPty = async (sessionId: string, ptyId: string): Promise<void> => {
-    const session = sessions.value.find((s) => s.id === sessionId);
+    const session = sessions.value.find((entry) => entry.id === sessionId);
     if (session) {
-      const idx = session.tabs.findIndex((t) => t.ptyId === ptyId);
-      if (idx !== -1) {
-        session.tabs[idx].terminal.dispose();
-        session.tabs.splice(idx, 1);
+      const tabIndex = session.tabs.findIndex((tab) => tab.ptyId === ptyId);
+      if (tabIndex !== -1) {
+        session.tabs[tabIndex].terminal.dispose();
+        session.tabs.splice(tabIndex, 1);
       }
     }
 
     await transport.send({
-      kind: "destroy_pty",
-      data: { session_id: sessionId, pty_id: ptyId },
+      kind: "destroyPty",
+      data: { sessionId, ptyId },
     });
   };
 
@@ -147,9 +147,12 @@ export const useSessionStore = (transport: SessionTransport) => {
     ptyId: string,
     tabName: string,
     parent: HTMLElement,
-    terminalOpts?: Omit<TerminalOptions, "parent" | "sessionId" | "ptyId" | "onInput" | "onResize">,
+    terminalOptions?: Omit<
+      TerminalOptions,
+      "parent" | "sessionId" | "ptyId" | "onInput" | "onResize"
+    >,
   ): TumTerminal => {
-    const session = sessions.value.find((s) => s.id === sessionId);
+    const session = sessions.value.find((entry) => entry.id === sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
@@ -163,20 +166,20 @@ export const useSessionStore = (transport: SessionTransport) => {
         const bytes = Array.from(encoder.encode(data));
         transport
           .send({
-            kind: "pty_input",
-            data: { session_id: sessionId, pty_id: ptyId, data: bytes },
+            kind: "ptyInput",
+            data: { sessionId, ptyId, data: bytes },
           })
-          .catch((err) => console.error("Failed to write to PTY:", err));
+          .catch((error) => console.error("Failed to write to PTY:", error));
       },
       onResize: (rows, cols) => {
         transport
           .send({
-            kind: "pty_resize",
-            data: { session_id: sessionId, pty_id: ptyId, rows, cols },
+            kind: "ptyResize",
+            data: { sessionId, ptyId, rows, cols },
           })
-          .catch((err) => console.error("Failed to resize PTY:", err));
+          .catch((error) => console.error("Failed to resize PTY:", error));
       },
-      ...terminalOpts,
+      ...terminalOptions,
     });
 
     session.tabs.push({ ptyId, name: tabName, terminal });
@@ -194,20 +197,20 @@ export const useSessionStore = (transport: SessionTransport) => {
   };
 };
 
-let _globalStore: ReturnType<typeof useSessionStore> | null = null;
+let globalStore: ReturnType<typeof useSessionStore> | null = null;
 
 export const getSessionStore = () => {
-  if (!_globalStore) {
+  if (!globalStore) {
     throw new Error("Session store not initialised. Call initSessionStore(transport) first.");
   }
-  return _globalStore;
+  return globalStore;
 };
 
 export const initSessionStore = (transport: SessionTransport) => {
-  if (_globalStore) {
+  if (globalStore) {
     console.warn("Session store already initialised; ignoring duplicate call.");
-    return _globalStore;
+    return globalStore;
   }
-  _globalStore = useSessionStore(transport);
-  return _globalStore;
+  globalStore = useSessionStore(transport);
+  return globalStore;
 };
