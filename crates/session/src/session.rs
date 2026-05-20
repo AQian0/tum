@@ -1,9 +1,21 @@
-use pty::{spawn_pty, PtyProcess};
+use pty::{spawn_pty, PtyExitStatus, PtyProcess};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use tum_events::SharedEventBus;
 use tum_ipc::ServerEvent;
 use uuid::Uuid;
+
+struct SpawnedPty {
+    id: String,
+    handle: Arc<PtyHandle>,
+    monitor: PtyMonitor,
+}
+
+struct PtyMonitor {
+    id: String,
+    output_rx: mpsc::Receiver<Vec<u8>>,
+    exit_rx: mpsc::Receiver<PtyExitStatus>,
+}
 
 pub struct PtyHandle {
     pub id: String,
@@ -11,9 +23,13 @@ pub struct PtyHandle {
 }
 
 impl PtyHandle {
-    pub fn kill(self) -> Result<(), String> {
+    pub fn kill(&self) -> Result<(), String> {
         let mut proc = self.process.lock().unwrap();
         proc.kill().map_err(|e| e.to_string())
+    }
+
+    pub fn process_id(&self) -> Option<u32> {
+        self.process.lock().unwrap().process_id()
     }
 }
 
@@ -21,7 +37,8 @@ pub struct Session {
     id: String,
     name: Option<String>,
     cwd: Option<String>,
-    ptys: Mutex<Vec<PtyHandle>>,
+    ptys: Arc<Mutex<Vec<Arc<PtyHandle>>>>,
+    pending_monitors: Mutex<Vec<PtyMonitor>>,
     event_bus: SharedEventBus,
     alive_count: Arc<AtomicUsize>,
 }
@@ -32,37 +49,50 @@ impl Session {
         name: Option<String>,
         cwd: Option<String>,
         shell: &str,
-    ) -> Self {
+    ) -> Result<Self, String> {
         let id = Uuid::new_v4().to_string();
-        let alive_count = Arc::new(AtomicUsize::new(1));
+        let alive_count = Arc::new(AtomicUsize::new(0));
+        let ptys = Arc::new(Mutex::new(Vec::new()));
 
-        let pty = Self::spawn_pty_inner(&id, &event_bus, &alive_count, shell, cwd.as_deref());
+        let spawned = Self::spawn_pty_inner(shell, cwd.as_deref())?;
 
-        Self {
+        alive_count.store(1, Ordering::SeqCst);
+        ptys.lock().unwrap().push(spawned.handle);
+
+        let pending_monitors = Mutex::new(vec![spawned.monitor]);
+
+        Ok(Self {
             id,
             name,
             cwd,
-            ptys: Mutex::new(vec![pty]),
+            ptys,
+            pending_monitors,
             event_bus,
-            alive_count: Arc::clone(&alive_count),
-        }
+            alive_count,
+        })
     }
 
-    pub(crate) fn attach_pty(&self, shell: &str, cwd: Option<&str>) -> String {
-        self.alive_count.fetch_add(1, Ordering::SeqCst);
-        let pty = Self::spawn_pty_inner(&self.id, &self.event_bus, &self.alive_count, shell, cwd);
-        let id = pty.id.clone();
-        self.ptys.lock().unwrap().push(pty);
-        id
+    pub(crate) fn attach_pty(&self, shell: &str, cwd: Option<&str>) -> Result<String, String> {
+        self.reserve_pty_slot()?;
+
+        let spawned = match Self::spawn_pty_inner(shell, cwd) {
+            Ok(spawned) => spawned,
+            Err(error) => {
+                self.release_pty_slot();
+                return Err(error);
+            }
+        };
+
+        let pty_id = spawned.id.clone();
+        self.ptys.lock().unwrap().push(spawned.handle);
+
+        self.start_pty_monitor(spawned.monitor);
+
+        Ok(pty_id)
     }
 
     pub(crate) fn write_pty(&self, pty_id: &str, data: &[u8]) -> Result<(), String> {
-        let guard = self.ptys.lock().unwrap();
-        let pty = guard
-            .iter()
-            .find(|p| p.id == pty_id)
-            .ok_or_else(|| format!("PTY not found: {pty_id}"))?;
-
+        let pty = self.pty(pty_id)?;
         let mut proc = pty.process.lock().unwrap();
         proc.write(data).map_err(|e| e.to_string())
     }
@@ -71,12 +101,8 @@ impl Session {
         if rows == 0 || cols == 0 {
             return Ok(());
         }
-        let guard = self.ptys.lock().unwrap();
-        let pty = guard
-            .iter()
-            .find(|p| p.id == pty_id)
-            .ok_or_else(|| format!("PTY not found: {pty_id}"))?;
 
+        let pty = self.pty(pty_id)?;
         let mut proc = pty.process.lock().unwrap();
         proc.resize(rows, cols).map_err(|e| e.to_string())
     }
@@ -102,7 +128,16 @@ impl Session {
         guard.first().map(|p| p.id.clone()).unwrap_or_default()
     }
 
-    pub fn take_pty(&self, pty_id: &str) -> Result<PtyHandle, String> {
+    fn pty(&self, pty_id: &str) -> Result<Arc<PtyHandle>, String> {
+        let guard = self.ptys.lock().unwrap();
+        guard
+            .iter()
+            .find(|p| p.id == pty_id)
+            .cloned()
+            .ok_or_else(|| format!("PTY not found: {pty_id}"))
+    }
+
+    pub fn take_pty(&self, pty_id: &str) -> Result<Arc<PtyHandle>, String> {
         let mut guard = self.ptys.lock().unwrap();
         let idx = guard
             .iter()
@@ -120,7 +155,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn take_all_ptys(&self) -> Vec<PtyHandle> {
+    pub fn take_all_ptys(&self) -> Vec<Arc<PtyHandle>> {
         let mut guard = self.ptys.lock().unwrap();
         guard.drain(..).collect()
     }
@@ -129,67 +164,140 @@ impl Session {
         for pty in self.take_all_ptys() {
             let pty_id = pty.id.clone();
             if let Err(error) = pty.kill() {
-                log::warn!("Failed to kill PTY {} in session {}: {error}", pty_id, self.id);
+                log::warn!(
+                    "Failed to kill PTY {} in session {}: {error}",
+                    pty_id,
+                    self.id
+                );
             }
         }
 
         log::info!("All PTYs destroyed in session {}", self.id);
     }
 
-    fn spawn_pty_inner(
-        session_id: &str,
-        event_bus: &SharedEventBus,
-        alive_count: &Arc<AtomicUsize>,
-        shell: &str,
-        cwd: Option<&str>,
-    ) -> PtyHandle {
+    pub(crate) fn start_pending_ptys(&self) {
+        let monitors = {
+            let mut guard = self.pending_monitors.lock().unwrap();
+            guard.drain(..).collect::<Vec<_>>()
+        };
+
+        for monitor in monitors {
+            self.start_pty_monitor(monitor);
+        }
+    }
+
+    fn start_pty_monitor(&self, monitor: PtyMonitor) {
+        Self::start_pty_threads(
+            self.id.clone(),
+            monitor.id,
+            self.event_bus.clone(),
+            Arc::clone(&self.alive_count),
+            Arc::clone(&self.ptys),
+            monitor.output_rx,
+            monitor.exit_rx,
+        );
+    }
+
+    fn spawn_pty_inner(shell: &str, cwd: Option<&str>) -> Result<SpawnedPty, String> {
         let pty_id = Uuid::new_v4().to_string();
+        let mut process = spawn_pty(shell, cwd, 24, 80).map_err(|e| e.to_string())?;
+        let output_rx = process.take_output_receiver().map_err(|e| e.to_string())?;
+        let exit_rx = process.take_exit_receiver().map_err(|e| e.to_string())?;
 
-        let mut pty =
-            spawn_pty(shell, cwd, 24, 80).unwrap_or_else(|e| panic!("failed to spawn PTY: {e}"));
+        Ok(SpawnedPty {
+            id: pty_id.clone(),
+            handle: Arc::new(PtyHandle {
+                id: pty_id.clone(),
+                process: Mutex::new(process),
+            }),
+            monitor: PtyMonitor {
+                id: pty_id,
+                output_rx,
+                exit_rx,
+            },
+        })
+    }
 
-        let sid = session_id.to_owned();
-        let pid = pty_id.clone();
-        let bus = event_bus.clone();
-        let count = Arc::clone(alive_count);
+    fn start_pty_threads(
+        session_id: String,
+        pty_id: String,
+        event_bus: SharedEventBus,
+        alive_count: Arc<AtomicUsize>,
+        ptys: Arc<Mutex<Vec<Arc<PtyHandle>>>>,
+        output_rx: mpsc::Receiver<Vec<u8>>,
+        exit_rx: mpsc::Receiver<PtyExitStatus>,
+    ) {
+        let output_sid = session_id.clone();
+        let output_pid = pty_id.clone();
+        let output_bus = event_bus.clone();
 
-        let reader = std::mem::replace(&mut pty.reader, {
-            let (_tx, rx) = std::sync::mpsc::channel();
-            rx
+        std::thread::spawn(move || {
+            while let Ok(data) = output_rx.recv() {
+                if let Ok(json) = serde_json::to_string(&ServerEvent::PtyOutput {
+                    session_id: output_sid.clone(),
+                    pty_id: output_pid.clone(),
+                    data,
+                }) {
+                    output_bus.emit("pty:output", &json);
+                }
+            }
         });
 
         std::thread::spawn(move || {
-            loop {
-                match reader.recv() {
-                    Ok(data) => {
-                        if let Ok(json) = serde_json::to_string(&ServerEvent::PtyOutput {
-                            session_id: sid.clone(),
-                            pty_id: pid.clone(),
-                            data,
-                        }) {
-                            bus.emit("pty:output", &json);
-                        }
-                    }
-                    Err(_) => break,
-                }
+            let status = exit_rx.recv().unwrap_or_else(|_| PtyExitStatus {
+                exit_code: -1,
+                error: Some("PTY exit status channel closed unexpectedly".into()),
+            });
+
+            if let Some(error) = &status.error {
+                log::warn!(
+                    "PTY {pty_id} in session {session_id} exited with watcher error: {error}"
+                );
             }
 
             if let Ok(json) = serde_json::to_string(&ServerEvent::PtyExit {
-                session_id: sid.clone(),
-                pty_id: pid.clone(),
-                exit_code: 0,
+                session_id: session_id.clone(),
+                pty_id: pty_id.clone(),
+                exit_code: status.exit_code,
             }) {
-                bus.emit("pty:exit", &json);
+                event_bus.emit("pty:exit", &json);
             }
 
-            if count.fetch_sub(1, Ordering::SeqCst) == 1 {
-                bus.emit("session:all_pty_exited", &sid);
+            let removed = {
+                let mut guard = ptys.lock().unwrap();
+                guard
+                    .iter()
+                    .position(|p| p.id == pty_id)
+                    .map(|idx| guard.remove(idx))
+            };
+            drop(removed);
+
+            if alive_count.fetch_sub(1, Ordering::SeqCst) == 1 {
+                event_bus.emit("session:all_pty_exited", &session_id);
             }
         });
+    }
 
-        PtyHandle {
-            id: pty_id,
-            process: Mutex::new(pty),
+    fn reserve_pty_slot(&self) -> Result<(), String> {
+        loop {
+            let current = self.alive_count.load(Ordering::SeqCst);
+            if current == 0 {
+                return Err(format!("session is not active: {}", self.id));
+            }
+
+            if self
+                .alive_count
+                .compare_exchange(current, current + 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
+    }
+
+    fn release_pty_slot(&self) {
+        if self.alive_count.fetch_sub(1, Ordering::SeqCst) == 1 {
+            self.event_bus.emit("session:all_pty_exited", &self.id);
         }
     }
 }

@@ -34,7 +34,7 @@ fn default_shell() -> String {
     }
 }
 
-type SessionMap = Arc<Mutex<HashMap<String, Session>>>;
+type SessionMap = Arc<Mutex<HashMap<String, Arc<Session>>>>;
 
 pub struct SessionManager {
     sessions: SessionMap,
@@ -77,28 +77,29 @@ impl SessionManager {
         match msg {
             ClientMessage::CreateSession { name, cwd, command } => {
                 let shell = command.unwrap_or_else(default_shell);
-                let session =
-                    Session::new(self.event_bus.clone(), name.clone(), cwd.clone(), &shell);
+                let session = Arc::new(Session::new(
+                    self.event_bus.clone(),
+                    name.clone(),
+                    cwd.clone(),
+                    &shell,
+                )?);
 
                 let session_id = session.id().to_owned();
                 let pty_id = session.first_pty_id();
                 self.sessions
                     .lock()
                     .unwrap()
-                    .insert(session_id.clone(), session);
+                    .insert(session_id.clone(), Arc::clone(&session));
+                session.start_pending_ptys();
 
                 log::info!("Session created: {session_id}");
                 Ok(ServerMessage::SessionCreated { session_id, pty_id })
             }
 
             ClientMessage::AttachPty { session_id, cwd } => {
-                let mut guard = self.sessions.lock().unwrap();
-                let session = guard
-                    .get_mut(&session_id)
-                    .ok_or_else(|| format!("session not found: {session_id}"))?;
-
+                let session = self.session(&session_id)?;
                 let shell = default_shell();
-                let pty_id = session.attach_pty(&shell, cwd.as_deref());
+                let pty_id = session.attach_pty(&shell, cwd.as_deref())?;
 
                 log::info!("PTY {pty_id} attached to session {session_id}");
                 Ok(ServerMessage::PtyAttached { pty_id })
@@ -109,10 +110,7 @@ impl SessionManager {
                 pty_id,
                 data,
             } => {
-                let mut guard = self.sessions.lock().unwrap();
-                let session = guard
-                    .get_mut(&session_id)
-                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                let session = self.session(&session_id)?;
                 session.write_pty(&pty_id, &data)?;
                 Ok(ServerMessage::Ack)
             }
@@ -123,22 +121,14 @@ impl SessionManager {
                 rows,
                 cols,
             } => {
-                let mut guard = self.sessions.lock().unwrap();
-                let session = guard
-                    .get_mut(&session_id)
-                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                let session = self.session(&session_id)?;
                 session.resize_pty(&pty_id, rows, cols)?;
                 Ok(ServerMessage::Ack)
             }
 
             ClientMessage::DestroyPty { session_id, pty_id } => {
-                let pty = {
-                    let guard = self.sessions.lock().unwrap();
-                    let session = guard
-                        .get(&session_id)
-                        .ok_or_else(|| format!("session not found: {session_id}"))?;
-                    session.take_pty(&pty_id)?
-                };
+                let session = self.session(&session_id)?;
+                let pty = session.take_pty(&pty_id)?;
 
                 pty.kill()?;
                 log::info!("PTY {pty_id} destroyed in session {session_id}");
@@ -180,6 +170,14 @@ impl SessionManager {
                 Ok(ServerMessage::SessionsListed { sessions })
             }
         }
+    }
+
+    fn session(&self, session_id: &str) -> Result<Arc<Session>, String> {
+        let guard = self.sessions.lock().unwrap();
+        guard
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| format!("session not found: {session_id}"))
     }
 }
 

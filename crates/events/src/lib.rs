@@ -25,7 +25,8 @@ impl EventBus {
         let callbacks: Vec<Subscriber> = {
             let subs = self.subscribers.lock().unwrap();
             subs.iter()
-                .filter_map(|(name, cb)| (name == event).then(|| Arc::clone(cb)))
+                .filter(|(name, _)| name == event)
+                .map(|(_, cb)| Arc::clone(cb))
                 .collect()
         };
 
