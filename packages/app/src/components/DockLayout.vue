@@ -1,130 +1,204 @@
 <script setup lang="ts">
-import { shallowRef } from "vue";
+import { onBeforeUnmount, provide, shallowRef } from "vue";
 import { DockviewVue } from "dockview-vue";
 import type { DockviewReadyEvent } from "dockview-vue";
-import { createDockSession, onEvent } from "@tum/core";
-import type { ServerEvent } from "@tum/core";
+import { createDockSession } from "@tum/core";
+import { workspaceActionsKey } from "./workspace";
+import type {
+  DockSessionController,
+  PaneSplitDirection,
+  SessionWorkspaceController,
+  WorkspaceActions,
+  WorkspacePanelParams,
+} from "./workspace";
 
-const { createPanePty, mountPaneTerminal, destroyPane } = createDockSession();
+type WorkspacePosition = {
+  direction: PaneSplitDirection | "within";
+  referencePanel: string;
+};
 
-const panelPtyMap = new Map<string, string>();
 const dockApi = shallowRef<DockviewReadyEvent["api"] | null>(null);
+
+const workspaceControllers = new Map<string, SessionWorkspaceController>();
+const workspaceSessions = new Map<string, DockSessionController>();
+const disposables: Array<{ dispose(): void }> = [];
+
+let workspaceCounter = 1;
+let disposing = false;
+
+const registerController = (workspaceId: string, controller: SessionWorkspaceController) => {
+  workspaceControllers.set(workspaceId, controller);
+};
+
+const unregisterController = (workspaceId: string, controller: SessionWorkspaceController) => {
+  if (workspaceControllers.get(workspaceId) === controller) {
+    workspaceControllers.delete(workspaceId);
+  }
+};
+
+const getWorkspaceParams = (workspaceId?: string): WorkspacePanelParams | null => {
+  const panel = workspaceId ? dockApi.value?.getPanel(workspaceId) : dockApi.value?.activePanel;
+  const params = panel?.params as WorkspacePanelParams | undefined;
+  return params?.workspaceId ? params : null;
+};
+
+const getWorkspaceController = (workspaceId?: string): SessionWorkspaceController | null => {
+  const resolvedWorkspaceId = getWorkspaceParams(workspaceId)?.workspaceId;
+  return resolvedWorkspaceId ? workspaceControllers.get(resolvedWorkspaceId) ?? null : null;
+};
+
+const closeWorkspaceById = (workspaceId: string) => {
+  const api = dockApi.value;
+  if (!api) return;
+
+  const panel = api.getPanel(workspaceId);
+  if (panel) {
+    api.removePanel(panel);
+  }
+};
+
+const createWorkspace = (api: NonNullable<typeof dockApi.value>, position?: WorkspacePosition) => {
+  const workspaceNumber = workspaceCounter++;
+  const workspaceId = `workspace-${workspaceNumber}`;
+  const title = `Tab ${workspaceNumber}`;
+  const dockSession = createDockSession({ sessionName: title });
+
+  workspaceSessions.set(workspaceId, dockSession);
+
+  api.addPanel({
+    id: workspaceId,
+    component: "SessionWorkspace",
+    title,
+    ...(position ? { position } : {}),
+    params: {
+      workspaceId,
+      title,
+      dockSession,
+      registerController,
+      unregisterController,
+      closeWorkspace: closeWorkspaceById,
+    },
+  });
+};
+
+const newWorkspaceTab = (referencePanelId?: string) => {
+  const api = dockApi.value;
+  if (!api) return;
+
+  if (referencePanelId && api.getPanel(referencePanelId)) {
+    createWorkspace(api, {
+      direction: "within",
+      referencePanel: referencePanelId,
+    });
+    return;
+  }
+
+  createWorkspace(api);
+};
+
+const splitWorkspace = (direction: PaneSplitDirection, referencePanelId?: string) => {
+  const api = dockApi.value;
+  if (!api) return;
+
+  const referencePanel = referencePanelId ? api.getPanel(referencePanelId) : api.activePanel;
+  if (!referencePanel) {
+    createWorkspace(api);
+    return;
+  }
+
+  createWorkspace(api, {
+    direction,
+    referencePanel: referencePanel.id,
+  });
+};
+
+const addPaneToWorkspace = (workspaceId?: string) => {
+  void getWorkspaceController(workspaceId)?.addPane();
+};
+
+const splitPaneInWorkspace = (workspaceId: string | undefined, direction: PaneSplitDirection) => {
+  void getWorkspaceController(workspaceId)?.splitPane(direction);
+};
+
+const closePaneInWorkspace = (workspaceId?: string) => {
+  getWorkspaceController(workspaceId)?.closeActivePane();
+};
+
+const closeWorkspace = (workspaceId?: string) => {
+  const resolvedWorkspaceId = getWorkspaceParams(workspaceId)?.workspaceId;
+  if (resolvedWorkspaceId) {
+    closeWorkspaceById(resolvedWorkspaceId);
+  }
+};
+
+provide(workspaceActionsKey, {
+  newWorkspaceTab,
+  splitWorkspace,
+  addPaneToWorkspace,
+  splitPaneInWorkspace,
+  closePaneInWorkspace,
+  closeWorkspace,
+} satisfies WorkspaceActions);
 
 const onReady = (event: DockviewReadyEvent) => {
   dockApi.value = event.api;
 
-  event.api.onDidRemovePanel((removedPanelEvent) => {
-    const ptyId = panelPtyMap.get(removedPanelEvent.id);
-    if (ptyId) {
-      panelPtyMap.delete(removedPanelEvent.id);
-      destroyPane(ptyId).catch((error) => console.error("Failed to destroy PTY:", error));
-    }
+  disposables.push(
+    event.api.onDidRemovePanel((removedPanelEvent) => {
+      const params = removedPanelEvent.params as WorkspacePanelParams | undefined;
+      const workspaceId = params?.workspaceId ?? removedPanelEvent.id;
+      const dockSession = params?.dockSession ?? workspaceSessions.get(workspaceId);
 
-    if (event.api.panels.length === 0) {
-      addInitialPane(event.api);
-    }
-  });
+      workspaceControllers.delete(workspaceId);
+      workspaceSessions.delete(workspaceId);
 
-  onEvent((serverEvent: ServerEvent) => {
-    if (serverEvent.kind !== "ptyExit") return;
-
-    for (const panel of event.api.panels) {
-      const params = panel.params as Record<string, unknown> | undefined;
-      if (params?.ptyId === serverEvent.data.ptyId) {
-        event.api.removePanel(panel);
-        break;
+      if (dockSession) {
+        dockSession
+          .destroySession()
+          .catch((error) => console.error(`Failed to destroy workspace ${workspaceId}:`, error));
       }
-    }
-  });
 
-  addInitialPane(event.api);
+      if (!disposing && event.api.panels.length === 0) {
+        createWorkspace(event.api);
+      }
+    }),
+  );
+
+  createWorkspace(event.api);
 };
 
-const addInitialPane = async (api: NonNullable<typeof dockApi.value>) => {
-  try {
-    const params = await createPanePty();
+onBeforeUnmount(() => {
+  disposing = true;
 
-    const panel = api.addPanel({
-      id: `pane-${params.ptyId}`,
-      component: "TerminalPane",
-      title: params.name,
-      params: {
-        ...params,
-        mountTerminal: (sessionId: string, ptyId: string, name: string, element: HTMLElement) =>
-          mountPaneTerminal(sessionId, ptyId, name, element),
-        destroyPane: async (ptyId: string) => {
-          await destroyPane(ptyId);
-        },
-      },
-    });
-
-    panelPtyMap.set(panel.id, params.ptyId);
-  } catch (error) {
-    console.error("Failed to create initial pane:", error);
-  }
-};
-
-const splitPane = async (direction: "right" | "below" | "left" | "above") => {
-  const api = dockApi.value;
-  if (!api) return;
-
-  const activePanel = api.activePanel;
-  if (!activePanel) {
-    addInitialPane(api);
-    return;
+  for (const disposable of disposables.splice(0)) {
+    disposable.dispose();
   }
 
-  try {
-    const params = await createPanePty();
-
-    const panel = api.addPanel({
-      id: `pane-${params.ptyId}`,
-      component: "TerminalPane",
-      title: params.name,
-      position: {
-        direction,
-        referencePanel: activePanel.id,
-      },
-      params: {
-        ...params,
-        mountTerminal: (sessionId: string, ptyId: string, name: string, element: HTMLElement) =>
-          mountPaneTerminal(sessionId, ptyId, name, element),
-        destroyPane: async (ptyId: string) => {
-          await destroyPane(ptyId);
-        },
-      },
-    });
-
-    panelPtyMap.set(panel.id, params.ptyId);
-  } catch (error) {
-    console.error("Failed to split pane:", error);
+  for (const dockSession of workspaceSessions.values()) {
+    void dockSession.destroySession();
   }
-};
 
-const closeActivePane = () => {
-  const api = dockApi.value;
-  if (!api) return;
-
-  const activePanel = api.activePanel;
-  if (activePanel) {
-    api.removePanel(activePanel);
-  }
-};
+  workspaceControllers.clear();
+  workspaceSessions.clear();
+});
 
 defineExpose({
-  splitRight: () => splitPane("right"),
-  splitBelow: () => splitPane("below"),
-  splitLeft: () => splitPane("left"),
-  splitAbove: () => splitPane("above"),
-  closeActivePane,
+  newWorkspaceTab,
+  splitWorkspace,
+  addPaneToWorkspace,
+  splitPaneInWorkspace,
+  closePaneInWorkspace,
+  closeWorkspace,
 });
 </script>
 
 <template>
   <DockviewVue
-    class="dockview-theme-dark w-full h-full"
+    class="dockview-theme-dark workspace-dock h-full w-full"
     :singleTabMode="'default'"
     :noPanelsOverlay="'watermark'"
+    :defaultTabComponent="'WorkspaceTab'"
+    :rightHeaderActionsComponent="'WorkspaceNewTabButton'"
     @ready="onReady"
   />
 </template>

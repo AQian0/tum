@@ -157,6 +157,14 @@ export const useSessionStore = (transport: SessionTransport) => {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    const existingTab = session.tabs.find((tab) => tab.ptyId === ptyId);
+    if (existingTab) {
+      existingTab.name = tabName;
+      existingTab.terminal.attach(parent);
+      existingTab.terminal.fit();
+      return existingTab.terminal;
+    }
+
     const terminal = new TumTerminal({
       parent,
       sessionId,

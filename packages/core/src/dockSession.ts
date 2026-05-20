@@ -8,14 +8,19 @@ export interface TerminalPaneParams {
   name: string;
 }
 
+export interface DockSessionOptions {
+  sessionName?: string;
+}
+
 /**
- * Single-session manager with multiple PTY-backed panes for dockview layout.
+ * Workspace-session manager with multiple PTY-backed panes for dockview layout.
  */
-export const createDockSession = () => {
+export const createDockSession = (options?: DockSessionOptions) => {
   const store = getSessionStore();
   const sessionId = shallowRef<string | null>(null);
 
   let counter = 1;
+  let destroyed = false;
 
   const session = (): SessionEntry | undefined => {
     const currentSessionId = sessionId.value;
@@ -29,10 +34,13 @@ export const createDockSession = () => {
   };
 
   const createPanePty = async (name?: string): Promise<TerminalPaneParams> => {
+    destroyed = false;
     const label = name ?? `Pane ${counter++}`;
 
-    if (!sessionId.value) {
-      const { session: createdSession, ptyId } = await store.createSession({ name: "tum" });
+    if (!sessionId.value || !session()) {
+      const { session: createdSession, ptyId } = await store.createSession({
+        name: options?.sessionName ?? "tum",
+      });
       sessionId.value = createdSession.id;
       return { sessionId: createdSession.id, ptyId, name: label };
     }
@@ -47,6 +55,13 @@ export const createDockSession = () => {
     name: string,
     parent: HTMLElement,
   ): SessionTab["terminal"] => {
+    const existingTerminal = findTerminal(ptyId);
+    if (existingTerminal) {
+      existingTerminal.attach(parent);
+      existingTerminal.fit();
+      return existingTerminal;
+    }
+
     return store.mountTerminal(sessionId, ptyId, name, parent, {
       welcomeMessage: `Welcome to tum — ${name}\r\n`,
     });
@@ -54,7 +69,7 @@ export const createDockSession = () => {
 
   const destroyPane = async (ptyId: string): Promise<void> => {
     const currentSessionId = sessionId.value;
-    if (!currentSessionId) return;
+    if (!currentSessionId || destroyed) return;
 
     const terminal = findTerminal(ptyId);
     if (terminal) {
@@ -64,11 +79,26 @@ export const createDockSession = () => {
     await store.destroyPty(currentSessionId, ptyId);
   };
 
+  const destroySession = async (): Promise<void> => {
+    const currentSessionId = sessionId.value;
+    if (!currentSessionId || destroyed) return;
+
+    destroyed = true;
+    sessionId.value = null;
+
+    try {
+      await store.destroySession(currentSessionId);
+    } catch (error) {
+      console.warn(`Failed to destroy session ${currentSessionId}:`, error);
+    }
+  };
+
   return {
     sessionId,
     createPanePty,
     mountPaneTerminal,
     destroyPane,
+    destroySession,
     findTerminal,
   };
 };

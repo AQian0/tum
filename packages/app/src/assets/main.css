@@ -56,6 +56,34 @@
   height: 100%;
 }
 
+.session-workspace-dock .dv-groupview > .dv-tabs-and-actions-container {
+  display: none;
+}
+
+.session-workspace-dock .dv-groupview > .dv-content-container {
+  min-height: 0;
+}
+
+.workspace-dock .dv-tabs-and-actions-container .dv-void-container {
+  flex-grow: 0;
+}
+
+.workspace-dock .dv-tabs-and-actions-container .dv-right-actions-container .dv-vue-part {
+  width: auto !important;
+}
+
+.workspace-dock .dv-tabs-container .dv-tab {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  padding: 0;
+}
+
+.workspace-dock .dv-tabs-container .dv-tab .dv-vue-part {
+  min-width: 0;
+  width: 100%;
+}
+
 @utility scrollbar-none {
   scrollbar-width: none;
 

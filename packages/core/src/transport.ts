@@ -6,10 +6,26 @@ export function createSessionTransport(): SessionTransport {
   return {
     send,
     subscribe(handler: (event: ServerEvent) => void) {
+      let active = true;
+      let unlisten: (() => void) | null = null;
+
       void onEvent((event) => {
-        handler(event);
+        if (active) {
+          handler(event);
+        }
+      }).then((dispose) => {
+        if (!active) {
+          dispose();
+          return;
+        }
+        unlisten = dispose;
       });
-      return () => {};
+
+      return () => {
+        active = false;
+        unlisten?.();
+        unlisten = null;
+      };
     },
   };
 }

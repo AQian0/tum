@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-pub type Subscriber = Box<dyn Fn(&str, &str) + Send + Sync>;
+pub type Subscriber = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
 pub struct EventBus {
     subscribers: Mutex<Vec<(String, Subscriber)>>,
@@ -18,15 +18,19 @@ impl EventBus {
         F: Fn(&str, &str) + Send + Sync + 'static,
     {
         let mut subs = self.subscribers.lock().unwrap();
-        subs.push((event.to_owned(), Box::new(callback)));
+        subs.push((event.to_owned(), Arc::new(callback)));
     }
 
     pub fn emit(&self, event: &str, json_payload: &str) {
-        let subs = self.subscribers.lock().unwrap();
-        for (name, cb) in subs.iter() {
-            if name == event {
-                cb(event, json_payload);
-            }
+        let callbacks: Vec<Subscriber> = {
+            let subs = self.subscribers.lock().unwrap();
+            subs.iter()
+                .filter_map(|(name, cb)| (name == event).then(|| Arc::clone(cb)))
+                .collect()
+        };
+
+        for cb in callbacks {
+            cb(event, json_payload);
         }
     }
 }

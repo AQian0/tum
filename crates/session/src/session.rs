@@ -10,6 +10,13 @@ pub struct PtyHandle {
     process: Mutex<PtyProcess>,
 }
 
+impl PtyHandle {
+    pub fn kill(self) -> Result<(), String> {
+        let mut proc = self.process.lock().unwrap();
+        proc.kill().map_err(|e| e.to_string())
+    }
+}
+
 pub struct Session {
     id: String,
     name: Option<String>,
@@ -95,19 +102,38 @@ impl Session {
         guard.first().map(|p| p.id.clone()).unwrap_or_default()
     }
 
-    pub fn destroy_pty(&self, pty_id: &str) -> Result<(), String> {
+    pub fn take_pty(&self, pty_id: &str) -> Result<PtyHandle, String> {
         let mut guard = self.ptys.lock().unwrap();
         let idx = guard
             .iter()
             .position(|p| p.id == pty_id)
             .ok_or_else(|| format!("PTY not found: {pty_id}"))?;
 
-        let pty = guard.remove(idx);
-        let mut proc = pty.process.lock().unwrap();
-        proc.kill().map_err(|e| e.to_string())?;
+        Ok(guard.remove(idx))
+    }
+
+    pub fn destroy_pty(&self, pty_id: &str) -> Result<(), String> {
+        let pty = self.take_pty(pty_id)?;
+        pty.kill()?;
 
         log::info!("PTY {pty_id} destroyed in session {}", self.id);
         Ok(())
+    }
+
+    pub fn take_all_ptys(&self) -> Vec<PtyHandle> {
+        let mut guard = self.ptys.lock().unwrap();
+        guard.drain(..).collect()
+    }
+
+    pub fn destroy_all_ptys(&self) {
+        for pty in self.take_all_ptys() {
+            let pty_id = pty.id.clone();
+            if let Err(error) = pty.kill() {
+                log::warn!("Failed to kill PTY {} in session {}: {error}", pty_id, self.id);
+            }
+        }
+
+        log::info!("All PTYs destroyed in session {}", self.id);
     }
 
     fn spawn_pty_inner(
@@ -165,5 +191,11 @@ impl Session {
             id: pty_id,
             process: Mutex::new(pty),
         }
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.destroy_all_ptys();
     }
 }

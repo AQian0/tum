@@ -50,8 +50,13 @@ impl SessionManager {
             let bus = event_bus.clone();
             event_bus.subscribe("session:all_pty_exited", move |_event, session_id| {
                 let id = session_id.to_owned();
-                let mut guard = sessions.lock().unwrap();
-                if guard.remove(&id).is_some() {
+                let removed_session = {
+                    let mut guard = sessions.lock().unwrap();
+                    guard.remove(&id)
+                };
+
+                if let Some(session) = removed_session {
+                    drop(session);
                     log::info!("Session auto-removed (all PTYs exited): {id}");
                     if let Ok(json) =
                         serde_json::to_string(&ServerEvent::SessionDestroyed { session_id: id })
@@ -127,20 +132,29 @@ impl SessionManager {
             }
 
             ClientMessage::DestroyPty { session_id, pty_id } => {
-                let mut guard = self.sessions.lock().unwrap();
-                let session = guard
-                    .get_mut(&session_id)
-                    .ok_or_else(|| format!("session not found: {session_id}"))?;
-                session.destroy_pty(&pty_id)?;
+                let pty = {
+                    let guard = self.sessions.lock().unwrap();
+                    let session = guard
+                        .get(&session_id)
+                        .ok_or_else(|| format!("session not found: {session_id}"))?;
+                    session.take_pty(&pty_id)?
+                };
+
+                pty.kill()?;
                 log::info!("PTY {pty_id} destroyed in session {session_id}");
                 Ok(ServerMessage::Ack)
             }
 
             ClientMessage::DestroySession { session_id } => {
-                let mut guard = self.sessions.lock().unwrap();
-                guard
-                    .remove(&session_id)
-                    .ok_or_else(|| format!("session not found: {session_id}"))?;
+                let session = {
+                    let mut guard = self.sessions.lock().unwrap();
+                    guard
+                        .remove(&session_id)
+                        .ok_or_else(|| format!("session not found: {session_id}"))?
+                };
+
+                session.destroy_all_ptys();
+                drop(session);
                 log::info!("Session destroyed: {session_id}");
 
                 if let Ok(json) = serde_json::to_string(&ServerEvent::SessionDestroyed {
