@@ -53,6 +53,9 @@ export class TumTerminal {
   private xterm: Terminal;
   private fitAddon: FitAddon;
   private resizeHandler: () => void;
+  private resizeObserver: ResizeObserver | null = null;
+  private fitFrame: number | null = null;
+  private parent: HTMLElement;
   private sessionId: string;
   private ptyId: string;
   private disposed = false;
@@ -60,6 +63,7 @@ export class TumTerminal {
   constructor(options: TerminalOptions) {
     this.sessionId = options.sessionId;
     this.ptyId = options.ptyId;
+    this.parent = options.parent;
 
     this.xterm = new Terminal({
       rows: options.rows ?? 24,
@@ -83,11 +87,7 @@ export class TumTerminal {
 
     this.xterm.loadAddon(new WebLinksAddon());
 
-    this.xterm.open(options.parent);
-    requestAnimationFrame(() => {
-      this.fitAddon.fit();
-      this.fillToEdge();
-    });
+    this.xterm.open(this.parent);
 
     if (options.welcomeMessage) {
       this.xterm.writeln(options.welcomeMessage);
@@ -96,12 +96,13 @@ export class TumTerminal {
     this.xterm.onData((data) => this.handleInput(data, options));
     this.xterm.onResize(({ rows, cols }) => this.handleResize(rows, cols, options));
 
-    this.resizeHandler = () => {
-      if (!this.xterm.element?.isConnected) return;
-      this.fitAddon.fit();
-      this.fillToEdge();
-    };
+    this.resizeHandler = () => this.scheduleFit();
     window.addEventListener("resize", this.resizeHandler);
+
+    this.resizeObserver = new ResizeObserver(() => this.scheduleFit());
+    this.resizeObserver.observe(this.parent);
+
+    this.scheduleFit();
   }
 
   writeOutput(payload: PtyOutputPayload): void {
@@ -119,8 +120,7 @@ export class TumTerminal {
   }
 
   fit(): void {
-    this.fitAddon.fit();
-    this.fillToEdge();
+    this.fitToParent();
   }
 
   focus(): void {
@@ -131,6 +131,11 @@ export class TumTerminal {
     if (this.disposed) return;
     this.disposed = true;
     window.removeEventListener("resize", this.resizeHandler);
+    this.resizeObserver?.disconnect();
+    if (this.fitFrame !== null) {
+      window.cancelAnimationFrame(this.fitFrame);
+      this.fitFrame = null;
+    }
     this.xterm.dispose();
   }
 
@@ -143,6 +148,12 @@ export class TumTerminal {
   }
 
   detach(): void {
+    this.resizeObserver?.disconnect();
+    if (this.fitFrame !== null) {
+      window.cancelAnimationFrame(this.fitFrame);
+      this.fitFrame = null;
+    }
+
     const element = this.xterm.element;
     if (element && element.parentElement) {
       element.parentElement.removeChild(element);
@@ -151,12 +162,32 @@ export class TumTerminal {
 
   attach(parent: HTMLElement): void {
     const element = this.xterm.element;
-    if (!element) return;
+    if (!element || this.disposed) return;
+
+    this.parent = parent;
     parent.appendChild(element);
-    requestAnimationFrame(() => {
-      this.fitAddon.fit();
-      this.fillToEdge();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver?.observe(parent);
+    this.scheduleFit();
+  }
+
+  private scheduleFit(): void {
+    if (this.disposed || !this.xterm.element?.isConnected || this.fitFrame !== null) return;
+
+    this.fitFrame = window.requestAnimationFrame(() => {
+      this.fitFrame = null;
+      this.fitToParent();
     });
+  }
+
+  private fitToParent(): void {
+    if (this.disposed || !this.xterm.element?.isConnected) return;
+
+    const parent = this.xterm.element.parentElement;
+    if (!parent || parent.clientWidth <= 0 || parent.clientHeight <= 0) return;
+
+    this.fitAddon.fit();
+    this.fillToEdge();
   }
 
   /**

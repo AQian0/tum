@@ -22,6 +22,7 @@
 
   html,
   body {
+    width: 100%;
     height: 100%;
     margin: 0;
     overflow: hidden;
@@ -29,6 +30,7 @@
   }
 
   #app {
+    width: 100%;
     height: 100%;
   }
 }
@@ -46,6 +48,12 @@
   --dv-tabs-and-actions-container-height: 32px;
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-active-sash-color: #c084fc;
+}
+
+.terminal-pane-container,
+.terminal-pane-container .xterm {
+  width: 100%;
+  height: 100%;
 }
 
 @utility scrollbar-none {

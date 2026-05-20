@@ -20,6 +20,7 @@ const props = defineProps<{
       ) => {
         dispose(): void;
         detach(): void;
+        fit(): void;
         focus(): void;
       };
       destroyPane?: (ptyId: string) => Promise<void>;
@@ -34,7 +35,12 @@ const props = defineProps<{
 }>();
 
 const containerRef = useTemplateRef<HTMLElement>("container");
-const terminal = shallowRef<{ dispose(): void; detach(): void; focus(): void } | null>(null);
+const terminal = shallowRef<{
+  dispose(): void;
+  detach(): void;
+  fit(): void;
+  focus(): void;
+} | null>(null);
 
 const panelParams = props.params.params;
 const panelApi = props.params.api;
@@ -49,11 +55,12 @@ onMounted(() => {
     terminal.value = mountTerminal(sessionId, ptyId, name, el);
   }
 
-  if (panelApi.isActive) {
-    requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    terminal.value?.fit();
+    if (panelApi.isActive) {
       terminal.value?.focus();
-    });
-  }
+    }
+  });
 });
 
 onBeforeUnmount(() => {
@@ -66,6 +73,7 @@ watch(
   (active) => {
     if (active) {
       requestAnimationFrame(() => {
+        terminal.value?.fit();
         terminal.value?.focus();
       });
     }
@@ -83,6 +91,8 @@ watch(
 
 <style scoped>
 .terminal-pane-container {
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 </style>
